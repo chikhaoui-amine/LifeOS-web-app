@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { FileJson, RefreshCw, AlertTriangle, Check, ArrowRight } from 'lucide-react';
-import { BackupData } from '../types';
+import { BackupData } from '../../types';
 
 interface RestoreModalProps {
   isOpen: boolean;
