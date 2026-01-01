@@ -3,8 +3,6 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { AppSettings, LanguageCode } from '../types';
 import { storage } from '../utils/storage';
 import { BackupService } from '../services/BackupService';
-import { Habit } from '../types';
-import { Task } from '../types';
 import { isRTL } from '../utils/translations';
 
 interface SettingsContextType {
@@ -84,7 +82,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     document.documentElement.lang = lang;
   }, [settings?.preferences?.language]);
 
-  // Check Auto Backup Logic
+  // Check Auto Backup Logic - Updated to capture ALL data
   useEffect(() => {
     const checkAutoBackup = async () => {
       if (!settings?.preferences?.autoBackup) return;
@@ -95,15 +93,72 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
       
       const oneDay = 24 * 60 * 60 * 1000;
       if (now.getTime() - lastBackup.getTime() > oneDay) {
-        const habits = await storage.load<Habit[]>('lifeos_habits_v2') || [];
-        const tasks = await storage.load<Task[]>('lifeos_tasks_v2') || [];
+        console.log("Running comprehensive auto-backup...");
         
-        await BackupService.createAutoSnapshot(habits, tasks, settings);
+        // 1. Core
+        const habits = await storage.load<any>('lifeos_habits_v2') || [];
+        const habitCategories = await storage.load<any>('lifeos_habit_categories_v1');
+        const tasks = await storage.load<any>('lifeos_tasks_v2') || [];
+        
+        // 2. Extended
+        const goals = await storage.load<any>('lifeos_goals_v1');
+        const journal = await storage.load<any>('lifeos_journal_v1');
+        const timeBlocks = await storage.load<any>('lifeos_time_blocks_v1');
+        
+        // 3. Finance
+        const accounts = await storage.load<any>('lifeos_finance_accounts_v1') || [];
+        const transactions = await storage.load<any>('lifeos_finance_transactions_v1') || [];
+        const budgets = await storage.load<any>('lifeos_finance_budgets_v1') || [];
+        const savingsGoals = await storage.load<any>('lifeos_finance_goals_v1') || [];
+        const currency = await storage.load<any>('lifeos_finance_currency_v1');
+        
+        // 4. Meals
+        const recipes = await storage.load<any>('lifeos_recipes_v1') || [];
+        const foods = await storage.load<any>('lifeos_foods_v1') || [];
+        const mealPlans = await storage.load<any>('lifeos_meal_plans_v1') || [];
+        const shoppingList = await storage.load<any>('lifeos_shopping_list_v1') || [];
+        
+        // 5. Sleep & Wellness
+        const sleepLogs = await storage.load<any>('lifeos_sleep_logs_v1');
+        const sleepSettings = await storage.load<any>('lifeos_sleep_settings_v1');
+        const wellnessApps = await storage.load<any>('lifeos_wellness_apps_v1') || [];
+        const wellnessSettings = await storage.load<any>('lifeos_wellness_settings_v1') || { strictMode: false, emergencyUnlockUsed: false };
+        const wellnessStats = await storage.load<any>('lifeos_wellness_stats_v1');
+        
+        // 6. Islamic
+        const prayers = await storage.load<any>('lifeos_islamic_data_v2');
+        const quran = await storage.load<any>('lifeos_quran_v2');
+        const adhkar = await storage.load<any>('lifeos_adhkar_v1');
+        const islamicSettings = await storage.load<any>('lifeos_islamic_settings_v1');
+        
+        // 7. Themes
+        const customThemes = await storage.load<any>('lifeos_custom_themes');
+
+        // Create Full Snapshot
+        const snapshot = BackupService.createBackupData(habits, tasks, settings);
+        
+        // Attach everything
+        snapshot.habitCategories = habitCategories;
+        snapshot.goals = goals;
+        snapshot.journal = journal;
+        snapshot.timeBlocks = timeBlocks;
+        snapshot.finance = { accounts, transactions, budgets, savingsGoals, currency };
+        snapshot.meals = { recipes, foods, mealPlans, shoppingList };
+        snapshot.sleepLogs = sleepLogs;
+        snapshot.sleepSettings = sleepSettings;
+        snapshot.digitalWellness = { blockedApps: wellnessApps, settings: wellnessSettings, stats: wellnessStats };
+        snapshot.prayers = prayers;
+        snapshot.quran = quran;
+        snapshot.adhkar = adhkar;
+        snapshot.islamicSettings = islamicSettings;
+        snapshot.customThemes = customThemes;
+
+        await BackupService.saveAutoSnapshot(snapshot);
         await storage.save(LAST_BACKUP_KEY, now.toISOString());
       }
     };
 
-    const timer = setTimeout(checkAutoBackup, 2000);
+    const timer = setTimeout(checkAutoBackup, 5000); // Wait 5s after load
     return () => clearTimeout(timer);
   }, [settings?.preferences?.autoBackup]);
 

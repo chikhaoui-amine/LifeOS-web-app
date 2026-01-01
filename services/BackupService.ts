@@ -38,7 +38,6 @@ export const BackupService = {
           return;
         }
       } catch (e) {
-        // Share cancelled or failed, fall back to download
         console.log('Share API failed or cancelled, attempting download fallback');
       }
     }
@@ -91,71 +90,84 @@ export const BackupService = {
   // --- Restore Logic ---
 
   performReplace: async (data: BackupData) => {
-    // 1. Core Modules
-    await storage.save('lifeos_habits_v2', data.habits);
-    if (data.habitCategories) await storage.save('lifeos_habit_categories_v1', data.habitCategories);
-    await storage.save('lifeos_tasks_v2', data.tasks);
-    await storage.save('lifeos_settings_v1', data.settings);
+    try {
+        // 1. Core Modules
+        await storage.save('lifeos_habits_v2', data.habits || []);
+        await storage.save('lifeos_tasks_v2', data.tasks || []);
+        await storage.save('lifeos_settings_v1', data.settings);
+        
+        // Save categories if present, otherwise ignore (context will use default)
+        if (data.habitCategories) await storage.save('lifeos_habit_categories_v1', data.habitCategories);
 
-    // 2. Extended Modules
-    if (data.journal) await storage.save('lifeos_journal_v1', data.journal);
-    if (data.goals) await storage.save('lifeos_goals_v1', data.goals);
-    
-    if (data.finance) {
-      await storage.save('lifeos_finance_accounts_v1', data.finance.accounts);
-      await storage.save('lifeos_finance_transactions_v1', data.finance.transactions);
-      await storage.save('lifeos_finance_budgets_v1', data.finance.budgets);
-      await storage.save('lifeos_finance_goals_v1', data.finance.savingsGoals);
-      if (data.finance.currency) await storage.save('lifeos_finance_currency_v1', data.finance.currency);
+        // 2. Extended Modules
+        if (data.journal) await storage.save('lifeos_journal_v1', data.journal);
+        if (data.goals) await storage.save('lifeos_goals_v1', data.goals);
+        
+        if (data.finance) {
+          await storage.save('lifeos_finance_accounts_v1', data.finance.accounts || []);
+          await storage.save('lifeos_finance_transactions_v1', data.finance.transactions || []);
+          await storage.save('lifeos_finance_budgets_v1', data.finance.budgets || []);
+          await storage.save('lifeos_finance_goals_v1', data.finance.savingsGoals || []);
+          if (data.finance.currency) await storage.save('lifeos_finance_currency_v1', data.finance.currency);
+        }
+        
+        if (data.meals) {
+          await storage.save('lifeos_recipes_v1', data.meals.recipes || []);
+          await storage.save('lifeos_foods_v1', data.meals.foods || []);
+          await storage.save('lifeos_meal_plans_v1', data.meals.mealPlans || []);
+          await storage.save('lifeos_shopping_list_v1', data.meals.shoppingList || []);
+        }
+        
+        if (data.sleepLogs) await storage.save('lifeos_sleep_logs_v1', data.sleepLogs);
+        if (data.sleepSettings) await storage.save('lifeos_sleep_settings_v1', data.sleepSettings);
+        
+        if (data.digitalWellness) {
+          await storage.save('lifeos_wellness_apps_v1', data.digitalWellness.blockedApps || []);
+          await storage.save('lifeos_wellness_settings_v1', data.digitalWellness.settings);
+          if (data.digitalWellness.stats) await storage.save('lifeos_wellness_stats_v1', data.digitalWellness.stats);
+        }
+        
+        if (data.timeBlocks) await storage.save('lifeos_time_blocks_v1', data.timeBlocks);
+        
+        // Deen
+        if (data.prayers) await storage.save('lifeos_islamic_data_v2', data.prayers);
+        if (data.quran) await storage.save('lifeos_quran_v2', data.quran);
+        if (data.adhkar) await storage.save('lifeos_adhkar_v1', data.adhkar);
+        if (data.islamicSettings) await storage.save('lifeos_islamic_settings_v1', data.islamicSettings);
+        
+        // Themes
+        if (data.customThemes) await storage.save('lifeos_custom_themes', data.customThemes);
+        
+        return true;
+    } catch (e) {
+        console.error("Restore failed", e);
+        throw e;
     }
-    
-    if (data.meals) {
-      await storage.save('lifeos_recipes_v1', data.meals.recipes);
-      if (data.meals.foods) await storage.save('lifeos_foods_v1', data.meals.foods);
-      await storage.save('lifeos_meal_plans_v1', data.meals.mealPlans);
-      await storage.save('lifeos_shopping_list_v1', data.meals.shoppingList);
-    }
-    
-    if (data.sleepLogs) await storage.save('lifeos_sleep_logs_v1', data.sleepLogs);
-    if (data.sleepSettings) await storage.save('lifeos_sleep_settings_v1', data.sleepSettings);
-    
-    if (data.digitalWellness) {
-      await storage.save('lifeos_wellness_apps_v1', data.digitalWellness.blockedApps);
-      await storage.save('lifeos_wellness_settings_v1', data.digitalWellness.settings);
-      if (data.digitalWellness.stats) await storage.save('lifeos_wellness_stats_v1', data.digitalWellness.stats);
-    }
-    
-    if (data.timeBlocks) await storage.save('lifeos_time_blocks_v1', data.timeBlocks);
-    
-    if (data.prayers) await storage.save('lifeos_islamic_data_v2', data.prayers);
-    if (data.quran) await storage.save('lifeos_quran_v2', data.quran);
-    if (data.adhkar) await storage.save('lifeos_adhkar_v1', data.adhkar);
-    if (data.islamicSettings) await storage.save('lifeos_islamic_settings_v1', data.islamicSettings);
-    
-    if (data.customThemes) await storage.save('lifeos_custom_themes', data.customThemes);
-    
-    return true;
   },
 
   performMerge: async (data: BackupData, currentHabits: Habit[], currentTasks: Task[]) => {
-    // Only merges core items for safety, extended items logic would be too complex for simple merge
+    // Merge logic for core items only, extended items complicated to merge safely
     const newHabits = [...currentHabits];
     let habitsAdded = 0;
-    data.habits.forEach(h => {
-      if (!newHabits.find(curr => curr.id === h.id)) {
-        newHabits.push(h);
-        habitsAdded++;
-      }
-    });
+    if (data.habits) {
+        data.habits.forEach(h => {
+          if (!newHabits.find(curr => curr.id === h.id)) {
+            newHabits.push(h);
+            habitsAdded++;
+          }
+        });
+    }
 
     const newTasks = [...currentTasks];
     let tasksAdded = 0;
-    data.tasks.forEach(t => {
-      if (!newTasks.find(curr => curr.id === t.id)) {
-        newTasks.push(t);
-        tasksAdded++;
-      }
-    });
+    if (data.tasks) {
+        data.tasks.forEach(t => {
+          if (!newTasks.find(curr => curr.id === t.id)) {
+            newTasks.push(t);
+            tasksAdded++;
+          }
+        });
+    }
 
     await storage.save('lifeos_habits_v2', newHabits);
     await storage.save('lifeos_tasks_v2', newTasks);
@@ -163,11 +175,17 @@ export const BackupService = {
     return { habitsAdded, tasksAdded };
   },
 
-  createAutoSnapshot: async (habits: Habit[], tasks: Task[], settings: AppSettings) => {
-    const snapshot = BackupService.createBackupData(habits, tasks, settings);
+  // Called by Auto-Backup in SettingsContext
+  saveAutoSnapshot: async (snapshot: BackupData) => {
     const history = await storage.load<BackupData[]>(AUTO_BACKUP_KEY) || [];
     const newHistory = [snapshot, ...history].slice(0, MAX_AUTO_BACKUPS);
     await storage.save(AUTO_BACKUP_KEY, newHistory);
+  },
+
+  // Legacy method kept for compatibility, prefer saveAutoSnapshot with full data
+  createAutoSnapshot: async (habits: Habit[], tasks: Task[], settings: AppSettings) => {
+    const snapshot = BackupService.createBackupData(habits, tasks, settings);
+    await BackupService.saveAutoSnapshot(snapshot);
   },
 
   getAutoSnapshots: async (): Promise<BackupData[]> => {

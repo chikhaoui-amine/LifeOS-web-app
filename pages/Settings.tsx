@@ -84,9 +84,10 @@ const Settings: React.FC = () => {
   const allThemes = [...PREBUILT_THEMES, ...savedThemes];
 
   const handleBackupData = () => {
+     // Create Base Object
      const data = BackupService.createBackupData(habits, tasks, settings);
      
-     // Attach comprehensive data from all modules
+     // Attach comprehensive data from all modules manually
      data.habitCategories = habitCategories;
      data.journal = journal;
      data.goals = goals;
