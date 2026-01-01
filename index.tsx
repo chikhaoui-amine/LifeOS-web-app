@@ -9,8 +9,12 @@ if (typeof window !== 'undefined') {
   (window as any).process.env = (window as any).process.env || {};
   
   try {
-    // Vite replaces this with the actual string value during build
-    const apiKey = (import.meta as any).env.VITE_API_KEY;
+    // Safely attempt to get the API key
+    // We use a defensive check to ensure 'env' exists on import.meta before accessing VITE_API_KEY
+    // This prevents the "Cannot read properties of undefined" error
+    const meta = import.meta as any;
+    const apiKey = (meta && meta.env) ? meta.env.VITE_API_KEY : "";
+    
     if (apiKey) {
       (window as any).process.env.API_KEY = apiKey;
     }
