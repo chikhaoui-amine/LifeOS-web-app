@@ -1,13 +1,12 @@
 
 import React, { useState, useMemo } from 'react';
-import { Cloud, LogOut, Check, Loader2, RefreshCw, User as UserIcon, AlertTriangle, Settings2 } from 'lucide-react';
+import { Cloud, LogOut, Check, Loader2, RefreshCw, User as UserIcon } from 'lucide-react';
 import { useSettings } from '../../context/SettingsContext';
 import { useSync } from '../../context/SyncContext';
 import { FirebaseService } from '../../services/FirebaseService';
 import { getTranslation } from '../../utils/translations';
 import { LanguageCode } from '../../types';
 import { useToast } from '../../context/ToastContext';
-import { FirebaseConfigModal } from './FirebaseConfigModal';
 
 export const GoogleBackupManager: React.FC = () => {
   const { settings } = useSettings();
@@ -16,7 +15,6 @@ export const GoogleBackupManager: React.FC = () => {
   const t = useMemo(() => getTranslation((settings?.preferences?.language || 'en') as LanguageCode), [settings?.preferences?.language]);
 
   const [isLoading, setIsLoading] = useState(false);
-  const [showConfigModal, setShowConfigModal] = useState(false);
 
   const handleConnect = async () => {
     setIsLoading(true);
@@ -25,9 +23,7 @@ export const GoogleBackupManager: React.FC = () => {
       showToast('Signed in successfully', 'success');
     } catch (e: any) {
       console.error(e);
-      if (e.message === "FIREBASE_CONFIG_MISSING") {
-        setShowConfigModal(true);
-      } else if (e.code === 'auth/popup-closed-by-user') {
+      if (e.code === 'auth/popup-closed-by-user') {
         showToast('Sign in cancelled', 'info');
       } else {
         showToast('Sign in failed. Check console.', 'error');
@@ -65,15 +61,6 @@ export const GoogleBackupManager: React.FC = () => {
                 {isLoading ? <Loader2 size={20} className="animate-spin" /> : <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />}
                 Sign in with Google
              </button>
-             
-             {!FirebaseService.isConfigured() && (
-                <button 
-                  onClick={() => setShowConfigModal(true)}
-                  className="text-xs text-orange-500 hover:text-orange-600 font-medium flex items-center justify-center gap-1 mt-2"
-                >
-                   <Settings2 size={12} /> Configure API Keys
-                </button>
-             )}
            </div>
         </div>
       ) : (
@@ -132,8 +119,6 @@ export const GoogleBackupManager: React.FC = () => {
            </div>
         </div>
       )}
-
-      {showConfigModal && <FirebaseConfigModal onClose={() => setShowConfigModal(false)} />}
     </>
   );
 };

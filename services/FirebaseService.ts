@@ -1,64 +1,80 @@
 
-import { initializeApp, getApps, deleteApp } from "firebase/app";
+import { initializeApp, getApps } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged, User } from "firebase/auth";
-import { getFirestore, doc, setDoc, onSnapshot, enableIndexedDbPersistence, collection } from "firebase/firestore";
+import { getFirestore, doc, setDoc, onSnapshot, enableIndexedDbPersistence } from "firebase/firestore";
+import { getAnalytics } from "firebase/analytics";
 import { BackupData } from '../types';
 
-const CONFIG_STORAGE_KEY = 'lifeos_firebase_config';
-
-// --- Configuration Management ---
-
-const getStoredConfig = () => {
-  try {
-    const stored = localStorage.getItem(CONFIG_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : null;
-  } catch (e) {
-    return null;
+const getFirebaseConfig = () => {
+  if (typeof window !== 'undefined') {
+    const stored = localStorage.getItem('lifeos_firebase_config');
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch (e) {
+        console.error("Failed to parse stored firebase config", e);
+      }
+    }
   }
+  
+  return {
+    apiKey: "AIzaSyBVij7Op3syRyNkf74dywyepxnQ1Y94ers",
+    authDomain: "lifeos-c12c6.firebaseapp.com",
+    projectId: "lifeos-c12c6",
+    storageBucket: "lifeos-c12c6.firebasestorage.app",
+    messagingSenderId: "930274272186",
+    appId: "1:930274272186:web:d45482df340e67bf8fb383",
+    measurementId: "G-VQ3KXPQPT2"
+  };
 };
 
-// Default placeholder to prevent crash on initial load if no config exists
-const defaultBufferConfig = {
-  apiKey: "YOUR_API_KEY_HERE",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
-};
+const firebaseConfig = getFirebaseConfig();
 
 // Initialize App dynamically
 let app: any;
 let auth: any;
 let db: any;
 let provider: any;
+let analytics: any;
 
 const initializeFirebase = () => {
-  const activeConfig = getStoredConfig() || defaultBufferConfig;
-  
-  // Prevent re-initialization error
+  if (!firebaseConfig) return;
+
   if (getApps().length > 0) {
     app = getApps()[0];
   } else {
-    app = initializeApp(activeConfig);
+    try {
+      app = initializeApp(firebaseConfig);
+      // Initialize analytics if supported
+      if (typeof window !== 'undefined') {
+          try {
+              analytics = getAnalytics(app);
+          } catch(e) {
+              console.warn("Firebase Analytics not supported in this environment");
+          }
+      }
+    } catch (e) {
+      console.error("Firebase init failed", e);
+    }
   }
 
-  auth = getAuth(app);
-  db = getFirestore(app);
-  provider = new GoogleAuthProvider();
+  if (app) {
+    try {
+      auth = getAuth(app);
+      db = getFirestore(app);
+      provider = new GoogleAuthProvider();
 
-  // Enable offline persistence (Web)
-  // Note: This might fail if multiple tabs are open, so we catch the error silently
-  try {
-    enableIndexedDbPersistence(db).catch((err) => {
-        if (err.code == 'failed-precondition') {
-            console.log('Multiple tabs open, persistence can only be enabled in one tab at a a time.');
-        } else if (err.code == 'unimplemented') {
-            console.log('The current browser does not support all of the features required to enable persistence');
-        }
-    });
-  } catch(e) {
-    // Ignore environments where persistence isn't supported
+      // Enable offline persistence (Web)
+      enableIndexedDbPersistence(db).catch((err) => {
+          if (err.code == 'failed-precondition') {
+              console.log('Multiple tabs open, persistence can only be enabled in one tab at a a time.');
+          } else if (err.code == 'unimplemented') {
+              console.log('The current browser does not support all of the features required to enable persistence');
+          }
+      });
+    } catch(e) {
+      console.warn("Firebase services init failed (persistence or other)", e);
+    }
   }
 };
 
@@ -70,25 +86,28 @@ export const FirebaseService = {
   currentUser: null as User | null,
 
   /**
-   * Check if the current configuration is valid (not placeholder)
+   * Check if configured
    */
   isConfigured: (): boolean => {
-    const config = getStoredConfig();
-    return config && config.apiKey !== "YOUR_API_KEY_HERE";
+    return !!auth;
   },
 
   /**
-   * Save new configuration and reload app to initialize correctly
+   * Save custom configuration
    */
   saveConfiguration: (config: any) => {
-    localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config));
-    window.location.reload(); 
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('lifeos_firebase_config', JSON.stringify(config));
+      window.location.reload();
+    }
   },
 
   /**
    * Initialize and listen for auth changes
    */
   init: (onUserChange: (user: User | null) => void) => {
+    if (!auth) return () => {};
+    
     return onAuthStateChanged(auth, (user: User | null) => {
       FirebaseService.currentUser = user;
       onUserChange(user);
@@ -99,10 +118,7 @@ export const FirebaseService = {
    * Sign in with Google Popup
    */
   signIn: async (): Promise<User> => {
-    if (!FirebaseService.isConfigured()) {
-        throw new Error("FIREBASE_CONFIG_MISSING");
-    }
-
+    if (!auth) throw new Error("Firebase not configured");
     try {
       const result = await signInWithPopup(auth, provider);
       return result.user;
@@ -116,6 +132,7 @@ export const FirebaseService = {
    * Sign Out
    */
   signOut: async (): Promise<void> => {
+    if (!auth) return;
     try {
       await firebaseSignOut(auth);
     } catch (error) {
@@ -129,12 +146,10 @@ export const FirebaseService = {
    * Path: users/{uid}
    */
   saveUserData: async (data: BackupData): Promise<void> => {
-    if (!auth.currentUser || !FirebaseService.isConfigured()) return;
+    if (!auth || !auth.currentUser) return;
 
     try {
       const userRef = doc(db, "users", auth.currentUser.uid);
-      // We store the huge JSON object in a single document for atomic consistency.
-      // Firestore document limit is 1MB. If app grows larger, we would need to split collections.
       await setDoc(userRef, { 
         backupData: data, 
         lastUpdated: new Date().toISOString(),
@@ -149,18 +164,14 @@ export const FirebaseService = {
 
   /**
    * Subscribe to Data Changes (Real-time Sync)
-   * This listens to the Firestore document. If another device updates it,
-   * this callback fires with the new data.
    */
   subscribeToUserData: (onDataReceived: (data: BackupData) => void) => {
-    if (!auth.currentUser || !FirebaseService.isConfigured()) return () => {};
+    if (!auth || !auth.currentUser) return () => {};
 
     const userRef = doc(db, "users", auth.currentUser.uid);
     
     const unsubscribe = onSnapshot(userRef, (docSnap) => {
       // metadata.hasPendingWrites is true if the event is from a local write.
-      // We typically ignore local writes to prevent feedback loops in the UI
-      // (though our context logic handles this too).
       if (docSnap.metadata.hasPendingWrites) {
         return;
       }
