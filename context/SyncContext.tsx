@@ -11,6 +11,7 @@ import { useSleep } from './SleepContext';
 import { useTimeBlocks } from './TimeBlockContext';
 import { useDigitalWellness } from './DigitalWellnessContext';
 import { useIslamic } from './IslamicContext';
+import { useTheme } from './ThemeContext';
 import { FirebaseService, User } from '../services/FirebaseService';
 import { BackupService } from '../services/BackupService';
 import { useToast } from './ToastContext';
@@ -27,17 +28,18 @@ const SyncContext = createContext<SyncContextType | undefined>(undefined);
 export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { settings, setGoogleConnected } = useSettings();
   
-  // Data Contexts
-  const { habits } = useHabits();
+  // Data Contexts - Gather EVERYTHING
+  const { habits, categories: habitCategories } = useHabits();
   const { tasks } = useTasks();
   const { entries: journal } = useJournal();
   const { goals } = useGoals();
-  const { accounts, transactions, budgets, savingsGoals } = useFinance();
-  const { recipes, mealPlans, shoppingList } = useMeals();
-  const { logs: sleepLogs } = useSleep();
+  const { accounts, transactions, budgets, savingsGoals, currency } = useFinance();
+  const { recipes, foods, mealPlans, shoppingList } = useMeals();
+  const { logs: sleepLogs, settings: sleepSettings } = useSleep();
   const { timeBlocks } = useTimeBlocks();
-  const { blockedApps, settings: wellnessSettings } = useDigitalWellness();
-  const { prayers, quran, adhkar } = useIslamic();
+  const { blockedApps, settings: wellnessSettings, stats: wellnessStats } = useDigitalWellness();
+  const { prayers, quran, adhkar, settings: islamicSettings } = useIslamic();
+  const { savedThemes } = useTheme();
   
   const { showToast } = useToast();
 
@@ -75,9 +77,6 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setLastSyncedAt(new Date());
         showToast('Data synced. Refresh page to update view.', 'info');
         
-        // Removed auto-reload to prevent infinite loops.
-        // User should refresh manually if they need to see external changes immediately.
-
       } catch (e) {
         console.error("Sync Error:", e);
       } finally {
@@ -95,25 +94,36 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Helper: Create Snapshot
   const getCurrentState = useCallback(() => {
     const state = BackupService.createBackupData(habits, tasks, settings);
+    state.habitCategories = habitCategories;
     state.journal = journal;
     state.goals = goals;
-    state.finance = { accounts, transactions, budgets, savingsGoals };
-    state.meals = { recipes, mealPlans, shoppingList };
+    state.finance = { accounts, transactions, budgets, savingsGoals, currency };
+    state.meals = { recipes, foods, mealPlans, shoppingList };
     state.sleepLogs = sleepLogs;
+    state.sleepSettings = sleepSettings;
     state.timeBlocks = timeBlocks;
-    state.digitalWellness = { blockedApps, settings: wellnessSettings };
+    state.digitalWellness = { blockedApps, settings: wellnessSettings, stats: wellnessStats };
     state.prayers = prayers;
     state.quran = quran;
     state.adhkar = adhkar;
+    state.islamicSettings = islamicSettings;
+    state.customThemes = savedThemes;
     return state;
-  }, [habits, tasks, settings, journal, goals, accounts, transactions, budgets, savingsGoals, recipes, mealPlans, shoppingList, sleepLogs, timeBlocks, blockedApps, wellnessSettings, prayers, quran, adhkar]);
+  }, [
+    habits, habitCategories, tasks, settings, 
+    journal, goals, 
+    accounts, transactions, budgets, savingsGoals, currency,
+    recipes, foods, mealPlans, shoppingList, 
+    sleepLogs, sleepSettings,
+    timeBlocks, 
+    blockedApps, wellnessSettings, wellnessStats, 
+    prayers, quran, adhkar, islamicSettings,
+    savedThemes
+  ]);
 
   // 3. Auto-Save (Device -> Cloud)
-  // This triggers whenever any dependency (app state) changes
   useEffect(() => {
     if (!user) return;
-    
-    // If we are currently restoring data from cloud, DO NOT push back
     if (isRestoringRef.current) return; 
 
     if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);

@@ -69,8 +69,10 @@ const Settings: React.FC = () => {
   const { tasks } = useTasks();
   const { entries: journal } = useJournal();
   const { goals } = useGoals();
-  const { accounts, transactions, budgets, savingsGoals } = useFinance();
-  const { recipes, mealPlans, shoppingList } = useMeals();
+  // Fix: Destructure currency to include in backup data
+  const { accounts, transactions, budgets, savingsGoals, currency } = useFinance();
+  // Fix: Destructure foods to include in backup data
+  const { recipes, foods, mealPlans, shoppingList } = useMeals();
   const { logs: sleepLogs } = useSleep();
   const { timeBlocks } = useTimeBlocks();
   const { blockedApps, settings: wellnessSettings } = useDigitalWellness();
@@ -88,8 +90,10 @@ const Settings: React.FC = () => {
      // Attach comprehensive data
      data.journal = journal;
      data.goals = goals;
-     data.finance = { accounts, transactions, budgets, savingsGoals };
-     data.meals = { recipes, mealPlans, shoppingList };
+     // Fix: Add currency to finance backup object
+     data.finance = { accounts, transactions, budgets, savingsGoals, currency };
+     // Fix: Add foods to meals backup object
+     data.meals = { recipes, foods, mealPlans, shoppingList };
      data.sleepLogs = sleepLogs;
      data.timeBlocks = timeBlocks;
      data.digitalWellness = { blockedApps, settings: wellnessSettings };

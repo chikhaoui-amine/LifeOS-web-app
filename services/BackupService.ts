@@ -11,8 +11,8 @@ export const BackupService = {
 
   createBackupData: (habits: Habit[], tasks: Task[], settings: AppSettings): BackupData => {
     return {
-      version: "1.0.0",
-      appVersion: "1.0.0",
+      version: "1.2.0",
+      appVersion: "1.2.0",
       exportDate: new Date().toISOString(),
       habits,
       tasks,
@@ -54,7 +54,6 @@ export const BackupService = {
     link.click();
     
     document.body.removeChild(link);
-    // Slight delay to ensure mobile browsers process the click before revoking
     setTimeout(() => URL.revokeObjectURL(href), 1000);
   },
 
@@ -94,37 +93,52 @@ export const BackupService = {
   performReplace: async (data: BackupData) => {
     // 1. Core Modules
     await storage.save('lifeos_habits_v2', data.habits);
+    if (data.habitCategories) await storage.save('lifeos_habit_categories_v1', data.habitCategories);
     await storage.save('lifeos_tasks_v2', data.tasks);
     await storage.save('lifeos_settings_v1', data.settings);
 
     // 2. Extended Modules
     if (data.journal) await storage.save('lifeos_journal_v1', data.journal);
     if (data.goals) await storage.save('lifeos_goals_v1', data.goals);
+    
     if (data.finance) {
       await storage.save('lifeos_finance_accounts_v1', data.finance.accounts);
       await storage.save('lifeos_finance_transactions_v1', data.finance.transactions);
       await storage.save('lifeos_finance_budgets_v1', data.finance.budgets);
       await storage.save('lifeos_finance_goals_v1', data.finance.savingsGoals);
+      if (data.finance.currency) await storage.save('lifeos_finance_currency_v1', data.finance.currency);
     }
+    
     if (data.meals) {
       await storage.save('lifeos_recipes_v1', data.meals.recipes);
+      if (data.meals.foods) await storage.save('lifeos_foods_v1', data.meals.foods);
       await storage.save('lifeos_meal_plans_v1', data.meals.mealPlans);
       await storage.save('lifeos_shopping_list_v1', data.meals.shoppingList);
     }
+    
     if (data.sleepLogs) await storage.save('lifeos_sleep_logs_v1', data.sleepLogs);
+    if (data.sleepSettings) await storage.save('lifeos_sleep_settings_v1', data.sleepSettings);
+    
     if (data.digitalWellness) {
       await storage.save('lifeos_wellness_apps_v1', data.digitalWellness.blockedApps);
       await storage.save('lifeos_wellness_settings_v1', data.digitalWellness.settings);
+      if (data.digitalWellness.stats) await storage.save('lifeos_wellness_stats_v1', data.digitalWellness.stats);
     }
+    
     if (data.timeBlocks) await storage.save('lifeos_time_blocks_v1', data.timeBlocks);
+    
     if (data.prayers) await storage.save('lifeos_islamic_data_v2', data.prayers);
     if (data.quran) await storage.save('lifeos_quran_v2', data.quran);
     if (data.adhkar) await storage.save('lifeos_adhkar_v1', data.adhkar);
+    if (data.islamicSettings) await storage.save('lifeos_islamic_settings_v1', data.islamicSettings);
+    
+    if (data.customThemes) await storage.save('lifeos_custom_themes', data.customThemes);
     
     return true;
   },
 
   performMerge: async (data: BackupData, currentHabits: Habit[], currentTasks: Task[]) => {
+    // Only merges core items for safety, extended items logic would be too complex for simple merge
     const newHabits = [...currentHabits];
     let habitsAdded = 0;
     data.habits.forEach(h => {

@@ -417,31 +417,37 @@ export interface BackupData {
   appVersion: string;
   exportDate: string;
   habits: Habit[];
+  habitCategories?: string[]; // Added
   tasks: Task[];
   goals?: Goal[];
   journal?: JournalEntry[];
   prayers?: DailyPrayers[];
   quran?: QuranProgress;
   adhkar?: AdhkarProgress[];
+  islamicSettings?: IslamicSettings; // Added
   finance?: {
     accounts: Account[];
     transactions: Transaction[];
     budgets: Budget[];
     savingsGoals: SavingsGoal[];
+    currency: string; // Added
   };
   meals?: {
     recipes: Recipe[];
+    foods: Food[]; // Added
     mealPlans: MealPlanDay[];
     shoppingList: ShoppingListItem[];
   };
   sleepLogs?: SleepLog[];
+  sleepSettings?: SleepSettings; // Added
   digitalWellness?: {
     blockedApps: BlockedApp[];
     settings: WellnessSettings;
+    stats?: any; // Added
   };
   timeBlocks?: TimeBlock[];
   settings: AppSettings;
-  customThemes?: Theme[];
+  customThemes?: Theme[]; // Added
 }
 
 export type NotificationType = 'habit' | 'task' | 'summary' | 'achievement' | 'streak';
