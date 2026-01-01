@@ -3,7 +3,7 @@ import React, { useState, useMemo, useRef } from 'react';
 import { 
   Bell, Trash2, Plus, Download, Upload, Palette, Check, 
   ChevronDown, ChevronUp, Globe, Cloud, Calendar, Moon, 
-  Shield, Cpu, Sparkles, Sun, Edit2, Zap, AlertTriangle, Loader2
+  Shield, Cpu, Sparkles, Sun, Edit2, Zap, AlertTriangle, Loader2, WifiOff
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { GoogleGenAI } from "@google/genai";
@@ -81,6 +81,7 @@ const Settings: React.FC = () => {
   const [modalConfig, setModalConfig] = useState<any>({ isOpen: false });
   const [showThemes, setShowThemes] = useState(false);
   const [isTestingApi, setIsTestingApi] = useState(false);
+  const [apiStatus, setApiStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const allThemes = [...PREBUILT_THEMES, ...savedThemes];
@@ -166,26 +167,39 @@ const Settings: React.FC = () => {
 
   const testConnection = async () => {
     setIsTestingApi(true);
+    setApiStatus('idle');
+    
     try {
       const apiKey = process.env.API_KEY;
+      
       if (!apiKey) {
-        throw new Error("VITE_API_KEY is missing in environment variables.");
+        throw new Error("Missing API Key. Ensure VITE_API_KEY is set in Vercel.");
       }
+
+      console.log("Testing with key ending in: ..." + apiKey.slice(-4));
 
       const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: 'Ping',
+        contents: 'Reply with one word: Pong',
       });
       
       if (response.text) {
-        showToast('Connection Successful! Gemini is active.', 'success');
+        setApiStatus('success');
+        showToast('System Online: AI is working perfectly.', 'success');
       } else {
-        throw new Error("No response text received.");
+        throw new Error("Empty response from model.");
       }
     } catch (e: any) {
       console.error(e);
-      showToast(`Connection Failed: ${e.message}`, 'error');
+      setApiStatus('error');
+      
+      let msg = e.message;
+      if (e.message.includes('403')) msg = "Permission Denied (403). Check API Key.";
+      if (e.message.includes('400')) msg = "Bad Request (400). Check Model Name.";
+      if (!process.env.API_KEY) msg = "Key Not Found. Check Environment Variables.";
+      
+      showToast(`Error: ${msg}`, 'error');
     } finally {
       setIsTestingApi(false);
     }
@@ -327,19 +341,33 @@ const Settings: React.FC = () => {
         <div className="space-y-6 sm:space-y-8">
             
             {/* Debug / System */}
-            <SettingSection title="System Check">
+            <SettingSection title="System Status">
                <button 
                  onClick={testConnection}
                  disabled={isTestingApi}
-                 className="w-full flex items-center justify-between px-5 py-4 text-left bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors group"
+                 className={`w-full flex items-center justify-between px-5 py-4 text-left bg-white dark:bg-gray-800 transition-colors group ${
+                    apiStatus === 'error' ? 'bg-red-50 dark:bg-red-900/10' : 
+                    apiStatus === 'success' ? 'bg-emerald-50 dark:bg-emerald-900/10' : 
+                    'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                 }`}
                >
                   <div className="flex items-center gap-3.5">
-                     <div className="p-2 bg-amber-100 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400 rounded-lg group-hover:scale-110 transition-transform">
-                        {isTestingApi ? <Loader2 size={18} className="animate-spin" /> : <Zap size={18} />}
+                     <div className={`p-2 rounded-lg group-hover:scale-110 transition-transform ${
+                        apiStatus === 'error' ? 'bg-red-100 text-red-600 dark:bg-red-900/30' :
+                        apiStatus === 'success' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30' :
+                        'bg-amber-100 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400'
+                     }`}>
+                        {isTestingApi ? <Loader2 size={18} className="animate-spin" /> : 
+                         apiStatus === 'error' ? <WifiOff size={18} /> : 
+                         apiStatus === 'success' ? <Check size={18} /> : <Zap size={18} />}
                      </div>
                      <div className="flex flex-col">
-                        <span className="font-medium text-sm sm:text-base text-gray-900 dark:text-white">Test AI Connection</span>
-                        <span className="text-xs text-gray-400 mt-0.5">Verify your API key functionality</span>
+                        <span className={`font-medium text-sm sm:text-base ${apiStatus === 'error' ? 'text-red-700 dark:text-red-300' : apiStatus === 'success' ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-900 dark:text-white'}`}>
+                           {isTestingApi ? 'Connecting...' : apiStatus === 'success' ? 'AI System Operational' : apiStatus === 'error' ? 'Connection Failed' : 'Test AI Connection'}
+                        </span>
+                        <span className="text-xs text-gray-400 mt-0.5">
+                           {apiStatus === 'error' ? 'Check your API Key settings' : 'Tap to verify API connectivity'}
+                        </span>
                      </div>
                   </div>
                </button>

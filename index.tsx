@@ -1,31 +1,33 @@
-
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
-// Safe Environment Variable Injection
-// We shim process.env for the Google GenAI SDK
+// --- ROBUST ENVIRONMENT VARIABLE INJECTION ---
 if (typeof window !== 'undefined') {
-  (window as any).process = (window as any).process || { env: {} };
+  // 1. Ensure global process object exists
+  (window as any).process = (window as any).process || {};
   (window as any).process.env = (window as any).process.env || {};
-  
+
   try {
-    // We access the variable directly so Vite can statically replace 'import.meta.env.VITE_API_KEY' with the string value.
-    // We check if import.meta.env exists before accessing the property to avoid runtime crashes.
-    // @ts-ignore
-    const env = import.meta.env; 
+    // 2. Access Vite env vars safely
+    // We use a conditional check: (import.meta && import.meta.env)
+    // This prevents the "Cannot read properties of undefined" error if env is missing.
+    // We keep the string 'import.meta.env.VITE_API_KEY' intact so Vite can replace it during build if the var exists.
     
     // @ts-ignore
-    const key = env ? env.VITE_API_KEY : undefined;
+    const viteKey = (typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env.VITE_API_KEY : undefined;
 
-    if (key && typeof key === 'string' && key.length > 0) {
-      (window as any).process.env.API_KEY = key;
-      console.log('LifeOS: API Key injected successfully.');
+    if (viteKey && typeof viteKey === 'string' && viteKey.trim().length > 0) {
+      (window as any).process.env.API_KEY = viteKey;
+      console.log(`LifeOS System: API Key injected successfully. (Length: ${viteKey.length})`);
     } else {
-      console.warn('LifeOS: VITE_API_KEY is missing. Check Vercel Environment Variables.');
+      console.warn('LifeOS System: VITE_API_KEY is missing or import.meta.env is undefined.');
+      console.warn('1. Check Vercel Environment Variables.');
+      console.warn('2. Ensure the key name is exactly "VITE_API_KEY".');
+      console.warn('3. Redeploy the application after setting the key.');
     }
   } catch (e) {
-    console.warn('LifeOS: Environment variable detection failed safely.', e);
+    console.error('LifeOS Critical: Environment injection crashed.', e);
   }
 }
 
