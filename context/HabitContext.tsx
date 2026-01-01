@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Habit } from '../types';
 import { getTodayKey, calculateStreak } from '../utils/dateUtils';
@@ -8,14 +9,14 @@ import { useSettings } from './SettingsContext';
 interface HabitContextType {
   habits: Habit[];
   loading: boolean;
-  categories: string[]; // New: Global Categories
+  categories: string[]; 
   addHabit: (habit: Omit<Habit, 'id' | 'createdAt' | 'completedDates' | 'archived'>) => Promise<void>;
   updateHabit: (id: string, updates: Partial<Habit>) => Promise<void>;
   deleteHabit: (id: string) => Promise<void>;
   toggleHabit: (id: string, date?: string) => Promise<void>;
   archiveHabit: (id: string) => Promise<void>;
-  addCategory: (category: string) => void; // New
-  deleteCategory: (category: string) => void; // New
+  addCategory: (category: string) => void; 
+  deleteCategory: (category: string) => void; 
   getHabitStats: () => { total: number; completedToday: number; completionRate: number };
 }
 
@@ -33,30 +34,32 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   
   const { settings } = useSettings();
 
-  // Load Data
-  useEffect(() => {
-    const loadData = async () => {
-      // 1. Load Habits
-      const habitsData = await storage.load<Habit[]>(HABITS_STORAGE_KEY);
-      if (habitsData) setHabits(habitsData);
+  const loadData = async () => {
+    // 1. Load Habits
+    const habitsData = await storage.load<Habit[]>(HABITS_STORAGE_KEY);
+    if (habitsData) setHabits(habitsData);
 
-      // 2. Load Categories
-      const categoriesData = await storage.load<string[]>(CATEGORIES_STORAGE_KEY);
-      if (categoriesData !== null) {
-        // If data exists (even if empty array), use it
-        // Note: For now, if empty, we reset to defaults to prevent UI issues, 
-        // but if user intentionally deletes all, we might want to allow it.
-        // Let's allow empty if user explicitly wants, but for safety fallback to default if null.
-        if (Array.isArray(categoriesData)) {
-            setCategories(categoriesData.length > 0 ? categoriesData : DEFAULT_CATEGORIES);
-        }
-      } else {
-        setCategories(DEFAULT_CATEGORIES);
+    // 2. Load Categories
+    const categoriesData = await storage.load<string[]>(CATEGORIES_STORAGE_KEY);
+    if (categoriesData !== null) {
+      if (Array.isArray(categoriesData)) {
+          setCategories(categoriesData.length > 0 ? categoriesData : DEFAULT_CATEGORIES);
       }
+    } else {
+      setCategories(DEFAULT_CATEGORIES);
+    }
 
-      setLoading(false);
-    };
+    setLoading(false);
+  };
+
+  // Load Data on Mount & Listen for Sync
+  useEffect(() => {
     loadData();
+    
+    const handleSync = () => loadData();
+    window.addEventListener('lifeos-sync-complete', handleSync);
+    
+    return () => window.removeEventListener('lifeos-sync-complete', handleSync);
   }, []);
 
   // Sync Habits to Storage

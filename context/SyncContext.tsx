@@ -24,7 +24,6 @@ interface SyncContextType {
 
 const SyncContext = createContext<SyncContextType | undefined>(undefined);
 
-const RESTORE_FLAG = 'lifeos_restore_pending';
 const LAST_PULL_KEY = 'lifeos_last_pull_ts';
 
 export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -77,7 +76,6 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     setIsSyncing(true);
     try {
-      // Ensure auth
       if (!GoogleDriveService.isSignedIn) await GoogleDriveService.signIn();
       
       const state = getCurrentState();
@@ -103,15 +101,13 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await BackupService.performReplace(cloudData);
         setLastSyncedAt(new Date());
         
-        // Mark as recently pulled to prevent loops
         localStorage.setItem(LAST_PULL_KEY, Date.now().toString());
-        // Set flag for restore handling
-        localStorage.setItem(RESTORE_FLAG, 'true');
         
-        window.location.reload();
+        // Dispatch event for other contexts to reload data smoothly without page reload
+        window.dispatchEvent(new Event('lifeos-sync-complete'));
+        showToast('Data synced successfully', 'success');
       } else {
         console.log("No remote backup found.");
-        // Even if no data, we mark as pulled so we can start pushing
         localStorage.setItem(LAST_PULL_KEY, Date.now().toString());
       }
     } catch (e) {
@@ -125,22 +121,10 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Initial Sync Logic (The "Handshake")
   useEffect(() => {
     const initSync = async () => {
-        // 1. Check if we just reloaded from a restore
-        const restoreFlag = localStorage.getItem(RESTORE_FLAG);
-        if (restoreFlag) {
-            console.log("Sync: Recovered from restore reload.");
-            localStorage.removeItem(RESTORE_FLAG);
-            setIsReadyToPush(true);
-            setLastSyncedAt(new Date());
-            return;
-        }
-
         if (isGoogleConnected) {
-            // 2. Safety Check: If we pulled very recently (e.g. < 15 seconds ago), don't pull again.
-            // This prevents the infinite reload loop if the flag mechanism fails.
+            // Safety Check: If we pulled very recently (e.g. < 15 seconds ago), don't pull again.
             const lastPull = localStorage.getItem(LAST_PULL_KEY);
             if (lastPull && (Date.now() - parseInt(lastPull) < 15000)) {
-                console.log("Sync: Recently pulled, skipping initial pull to prevent loop.");
                 setIsReadyToPush(true);
                 return;
             }
@@ -149,7 +133,6 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                await pullFromCloud();
             } catch(e) { console.error(e); }
             finally { 
-                // Allow pushing after attempt, success or fail
                 setIsReadyToPush(true); 
             }
         } else {
@@ -160,7 +143,7 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Delay to allow Auth load
     const timer = setTimeout(initSync, 2000);
     return () => clearTimeout(timer);
-  }, [isGoogleConnected]); // Intentionally exclude pullFromCloud to avoid recreation loops
+  }, [isGoogleConnected]); 
 
   // Automated Push (Debounced)
   useEffect(() => {
