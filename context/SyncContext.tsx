@@ -9,21 +9,26 @@ import { useFinance } from './FinanceContext';
 import { useMeals } from './MealContext';
 import { useSleep } from './SleepContext';
 import { useTimeBlocks } from './TimeBlockContext';
-import { GoogleDriveService } from '../services/GoogleDriveService';
+import { useDigitalWellness } from './DigitalWellnessContext';
+import { useIslamic } from './IslamicContext';
+import { FirebaseService } from '../services/FirebaseService';
 import { BackupService } from '../services/BackupService';
 import { useToast } from './ToastContext';
+import { User } from 'firebase/auth';
 
 interface SyncContextType {
   isSyncing: boolean;
   lastSyncedAt: Date | null;
-  syncNow: () => Promise<void>;
-  pullFromCloud: () => Promise<void>;
+  user: User | null;
+  syncNow: () => Promise<void>; // Manual force push
 }
 
 const SyncContext = createContext<SyncContextType | undefined>(undefined);
 
 export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { settings, isGoogleConnected, updateSettings } = useSettings();
+  const { settings, setGoogleConnected } = useSettings();
+  
+  // Data Contexts
   const { habits } = useHabits();
   const { tasks } = useTasks();
   const { entries: journal } = useJournal();
@@ -32,87 +37,121 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const { recipes, mealPlans, shoppingList } = useMeals();
   const { logs: sleepLogs } = useSleep();
   const { timeBlocks } = useTimeBlocks();
+  const { blockedApps, settings: wellnessSettings } = useDigitalWellness();
+  const { prayers, quran, adhkar } = useIslamic();
+  
   const { showToast } = useToast();
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
-  const isInitialLoad = useRef(true);
-  const syncTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  
+  // Ref to prevent "saving" data that we just "received" from the cloud
+  const isRestoringRef = useRef(false);
+  const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const syncNow = useCallback(async () => {
-    if (!isGoogleConnected || !GoogleDriveService.isSignedIn) return;
+  // 1. Initialize Firebase Auth Listener
+  useEffect(() => {
+    const unsubscribe = FirebaseService.init((currentUser) => {
+      setUser(currentUser);
+      setGoogleConnected(!!currentUser);
+    });
+    return () => unsubscribe();
+  }, [setGoogleConnected]);
 
-    setIsSyncing(true);
-    try {
-      const state = BackupService.createBackupData(habits, tasks, settings);
-      state.journal = journal;
-      state.goals = goals;
-      state.finance = { accounts, transactions, budgets, savingsGoals };
-      state.meals = { recipes, mealPlans, shoppingList };
-      state.sleepLogs = sleepLogs;
-      state.timeBlocks = timeBlocks;
+  // 2. Real-time Subscription (Cloud -> Device)
+  useEffect(() => {
+    if (!user) return;
 
-      await GoogleDriveService.saveMasterSync(state);
-      setLastSyncedAt(new Date());
-    } catch (e) {
-      console.error("Auto-sync failed", e);
-    } finally {
-      setIsSyncing(false);
-    }
-  }, [isGoogleConnected, habits, tasks, settings, journal, goals, accounts, transactions, budgets, savingsGoals, recipes, mealPlans, shoppingList, sleepLogs, timeBlocks]);
-
-  const pullFromCloud = useCallback(async () => {
-    if (!isGoogleConnected) return;
-    
-    setIsSyncing(true);
-    try {
-      if (!GoogleDriveService.isSignedIn) await GoogleDriveService.signIn();
+    const unsubscribe = FirebaseService.subscribeToUserData(async (cloudData) => {
+      console.log("Sync: Cloud data received, updating local...");
       
-      const cloudData = await GoogleDriveService.getLatestMasterSync();
-      if (cloudData) {
-        // Compare with local and prompt or auto-merge
-        // For a seamless "everything up to date" experience, we replace local with cloud on startup
-        // if cloud is newer (or just always replace on startup if connected)
+      // Set flag to prevent the 'useEffect' below from pushing this data back to cloud
+      isRestoringRef.current = true;
+      setIsSyncing(true);
+
+      try {
         await BackupService.performReplace(cloudData);
-        showToast('Sync complete: Data updated from cloud', 'success');
-        // We don't reload here to avoid loops, the contexts will pick up new storage data on next load 
-        // OR better: reload once.
-        window.location.reload();
+        setLastSyncedAt(new Date());
+        
+        // Notify all contexts to reload from localStorage
+        window.dispatchEvent(new Event('lifeos-sync-complete'));
+        showToast('Data synced from other device', 'success');
+      } catch (e) {
+        console.error("Sync Error:", e);
+      } finally {
+        setIsSyncing(false);
+        // Allow pushes again after a short delay
+        setTimeout(() => {
+          isRestoringRef.current = false;
+        }, 2000);
       }
-    } catch (e) {
-      console.error("Pull from cloud failed", e);
-    } finally {
-      setIsSyncing(false);
-    }
-  }, [isGoogleConnected, showToast]);
+    });
 
-  // Initial Pull on startup if connected
+    return () => unsubscribe();
+  }, [user, showToast]);
+
+  // Helper: Create Snapshot
+  const getCurrentState = useCallback(() => {
+    const state = BackupService.createBackupData(habits, tasks, settings);
+    state.journal = journal;
+    state.goals = goals;
+    state.finance = { accounts, transactions, budgets, savingsGoals };
+    state.meals = { recipes, mealPlans, shoppingList };
+    state.sleepLogs = sleepLogs;
+    state.timeBlocks = timeBlocks;
+    state.digitalWellness = { blockedApps, settings: wellnessSettings };
+    state.prayers = prayers;
+    state.quran = quran;
+    state.adhkar = adhkar;
+    return state;
+  }, [habits, tasks, settings, journal, goals, accounts, transactions, budgets, savingsGoals, recipes, mealPlans, shoppingList, sleepLogs, timeBlocks, blockedApps, wellnessSettings, prayers, quran, adhkar]);
+
+  // 3. Auto-Save (Device -> Cloud)
   useEffect(() => {
-    if (isGoogleConnected && isInitialLoad.current) {
-      pullFromCloud();
-      isInitialLoad.current = false;
-    }
-  }, [isGoogleConnected, pullFromCloud]);
+    if (!user) return;
+    if (isRestoringRef.current) return; // Don't save if we are currently restoring
 
-  // Automated Push (Debounced)
-  useEffect(() => {
-    if (isInitialLoad.current) return;
-    if (!isGoogleConnected) return;
+    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
 
-    // Debounce to avoid hitting API on every keystroke in journal/tasks
-    if (syncTimeout.current) clearTimeout(syncTimeout.current);
-    
-    syncTimeout.current = setTimeout(() => {
-      syncNow();
-    }, 5000); // 5 second quiet period before sync
+    syncTimeoutRef.current = setTimeout(async () => {
+      if (isRestoringRef.current) return; // Double check
+
+      setIsSyncing(true);
+      try {
+        const data = getCurrentState();
+        await FirebaseService.saveUserData(data);
+        setLastSyncedAt(new Date());
+        console.log("Sync: Pushed local changes to cloud");
+      } catch (e) {
+        console.error("Auto-save failed", e);
+      } finally {
+        setIsSyncing(false);
+      }
+    }, 5000); // 5 second debounce
 
     return () => {
-      if (syncTimeout.current) clearTimeout(syncTimeout.current);
+      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
     };
-  }, [isGoogleConnected, habits, tasks, settings, journal, goals, accounts, transactions, budgets, savingsGoals, recipes, mealPlans, shoppingList, sleepLogs, timeBlocks, syncNow]);
+  }, [user, getCurrentState]); // Dependency on state triggers this effect
+
+  const syncNow = async () => {
+    if (!user) return;
+    setIsSyncing(true);
+    try {
+        const data = getCurrentState();
+        await FirebaseService.saveUserData(data);
+        setLastSyncedAt(new Date());
+        showToast('Force sync complete', 'success');
+    } catch(e) {
+        showToast('Sync failed', 'error');
+    } finally {
+        setIsSyncing(false);
+    }
+  };
 
   return (
-    <SyncContext.Provider value={{ isSyncing, lastSyncedAt, syncNow, pullFromCloud }}>
+    <SyncContext.Provider value={{ isSyncing, lastSyncedAt, user, syncNow }}>
       {children}
     </SyncContext.Provider>
   );
