@@ -1,25 +1,28 @@
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
 // Polyfill process.env.API_KEY for Google GenAI SDK
-// We do this in the TSX file so Vite properly replaces import.meta.env.VITE_API_KEY at build time
+// This runs before the App renders to ensure the key is available globally
 if (typeof window !== 'undefined') {
   (window as any).process = (window as any).process || { env: {} };
   (window as any).process.env = (window as any).process.env || {};
   
   try {
-    // Safely attempt to get the API key
-    // We use a defensive check to ensure 'env' exists on import.meta before accessing VITE_API_KEY
-    // This prevents the "Cannot read properties of undefined" error
-    const meta = import.meta as any;
-    const apiKey = (meta && meta.env) ? meta.env.VITE_API_KEY : "";
+    // VITE_API_KEY is replaced by the build tool (Vite) with the actual string value
+    // defined in your Vercel Environment Variables.
+    // @ts-ignore
+    const apiKey = import.meta.env.VITE_API_KEY;
     
-    if (apiKey) {
+    if (apiKey && typeof apiKey === 'string' && apiKey.length > 0) {
       (window as any).process.env.API_KEY = apiKey;
+      console.log('LifeOS: API Key successfully injected from environment.');
+    } else {
+      console.warn('LifeOS: VITE_API_KEY is missing or empty. Please check Vercel settings and redeploy.');
     }
   } catch (e) {
-    console.warn('Failed to access import.meta.env', e);
+    console.error('LifeOS: Failed to initialize environment variables', e);
   }
 }
 
