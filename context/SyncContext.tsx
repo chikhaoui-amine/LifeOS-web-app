@@ -73,19 +73,10 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       try {
         await BackupService.performReplace(cloudData);
         setLastSyncedAt(new Date());
-        showToast('Data synced from cloud', 'success');
+        showToast('Data synced. Refresh page to update view.', 'info');
         
-        // Force reload to ensure all contexts pick up the new localStorage data
-        // Ideally contexts would listen to storage events, but a reload is safer for a "Full Sync"
-        // To avoid jarring reload, we rely on BackupService to update storage, 
-        // and ideally Contexts should re-read storage.
-        // Since React Contexts hold state in memory, we need to trigger them to reload.
-        // The simplest way without refactoring every context is a quick reload or event bus.
-        // For this implementation, we will dispatch a custom event that contexts *could* listen to,
-        // but for robustness in this architecture, a reload is often preferred for full state replacement.
-        setTimeout(() => {
-             window.location.reload(); 
-        }, 1000);
+        // Removed auto-reload to prevent infinite loops.
+        // User should refresh manually if they need to see external changes immediately.
 
       } catch (e) {
         console.error("Sync Error:", e);
