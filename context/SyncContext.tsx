@@ -11,10 +11,9 @@ import { useSleep } from './SleepContext';
 import { useTimeBlocks } from './TimeBlockContext';
 import { useDigitalWellness } from './DigitalWellnessContext';
 import { useIslamic } from './IslamicContext';
-import { FirebaseService } from '../services/FirebaseService';
+import { FirebaseService, User } from '../services/FirebaseService';
 import { BackupService } from '../services/BackupService';
 import { useToast } from './ToastContext';
-import { User } from 'firebase/auth';
 
 interface SyncContextType {
   isSyncing: boolean;
