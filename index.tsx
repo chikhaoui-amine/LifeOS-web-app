@@ -3,30 +3,29 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
-// Polyfill process.env.API_KEY for Google GenAI SDK
-// This runs before the App renders to ensure the key is available globally
+// Safe Environment Variable Injection
+// We shim process.env for the Google GenAI SDK
 if (typeof window !== 'undefined') {
   (window as any).process = (window as any).process || { env: {} };
   (window as any).process.env = (window as any).process.env || {};
   
   try {
-    // SAFELY access VITE_API_KEY.
-    // We use a conditional check: (import.meta && import.meta.env) ? ... : ...
-    // This prevents the "Cannot read properties of undefined" error if import.meta.env is missing.
-    // However, we still include the exact string 'import.meta.env.VITE_API_KEY' so Vite's build tool can find and replace it.
+    // We access the variable directly so Vite can statically replace 'import.meta.env.VITE_API_KEY' with the string value.
+    // We check if import.meta.env exists before accessing the property to avoid runtime crashes.
+    // @ts-ignore
+    const env = import.meta.env; 
     
     // @ts-ignore
-    const apiKey = (import.meta && import.meta.env) ? import.meta.env.VITE_API_KEY : "";
-    
-    if (apiKey && typeof apiKey === 'string' && apiKey.length > 0) {
-      (window as any).process.env.API_KEY = apiKey;
-      console.log('LifeOS: API Key successfully injected from environment.');
+    const key = env ? env.VITE_API_KEY : undefined;
+
+    if (key && typeof key === 'string' && key.length > 0) {
+      (window as any).process.env.API_KEY = key;
+      console.log('LifeOS: API Key injected successfully.');
     } else {
-      console.warn('LifeOS: VITE_API_KEY is missing or empty. Please check Vercel settings and redeploy.');
+      console.warn('LifeOS: VITE_API_KEY is missing. Check Vercel Environment Variables.');
     }
   } catch (e) {
-    // This catch block handles any other unexpected errors during initialization
-    console.error('LifeOS: Failed to initialize environment variables', e);
+    console.warn('LifeOS: Environment variable detection failed safely.', e);
   }
 }
 

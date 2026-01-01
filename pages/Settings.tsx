@@ -3,9 +3,10 @@ import React, { useState, useMemo, useRef } from 'react';
 import { 
   Bell, Trash2, Plus, Download, Upload, Palette, Check, 
   ChevronDown, ChevronUp, Globe, Cloud, Calendar, Moon, 
-  Shield, Cpu, Sparkles, Sun, Edit2
+  Shield, Cpu, Sparkles, Sun, Edit2, Zap, AlertTriangle, Loader2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { GoogleGenAI } from "@google/genai";
 import { useSettings } from '../context/SettingsContext';
 import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
@@ -79,6 +80,7 @@ const Settings: React.FC = () => {
   const t = useMemo(() => getTranslation((settings?.preferences?.language || 'en') as LanguageCode), [settings?.preferences?.language]);
   const [modalConfig, setModalConfig] = useState<any>({ isOpen: false });
   const [showThemes, setShowThemes] = useState(false);
+  const [isTestingApi, setIsTestingApi] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const allThemes = [...PREBUILT_THEMES, ...savedThemes];
@@ -160,6 +162,33 @@ const Settings: React.FC = () => {
       confirmText: 'Delete',
       onConfirm: () => deleteCustomTheme(id)
     });
+  };
+
+  const testConnection = async () => {
+    setIsTestingApi(true);
+    try {
+      const apiKey = process.env.API_KEY;
+      if (!apiKey) {
+        throw new Error("VITE_API_KEY is missing in environment variables.");
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: 'Ping',
+      });
+      
+      if (response.text) {
+        showToast('Connection Successful! Gemini is active.', 'success');
+      } else {
+        throw new Error("No response text received.");
+      }
+    } catch (e: any) {
+      console.error(e);
+      showToast(`Connection Failed: ${e.message}`, 'error');
+    } finally {
+      setIsTestingApi(false);
+    }
   };
 
   return (
@@ -297,6 +326,25 @@ const Settings: React.FC = () => {
         {/* Column 2 */}
         <div className="space-y-6 sm:space-y-8">
             
+            {/* Debug / System */}
+            <SettingSection title="System Check">
+               <button 
+                 onClick={testConnection}
+                 disabled={isTestingApi}
+                 className="w-full flex items-center justify-between px-5 py-4 text-left bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors group"
+               >
+                  <div className="flex items-center gap-3.5">
+                     <div className="p-2 bg-amber-100 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400 rounded-lg group-hover:scale-110 transition-transform">
+                        {isTestingApi ? <Loader2 size={18} className="animate-spin" /> : <Zap size={18} />}
+                     </div>
+                     <div className="flex flex-col">
+                        <span className="font-medium text-sm sm:text-base text-gray-900 dark:text-white">Test AI Connection</span>
+                        <span className="text-xs text-gray-400 mt-0.5">Verify your API key functionality</span>
+                     </div>
+                  </div>
+               </button>
+            </SettingSection>
+
             {/* Cloud */}
             <GoogleBackupManager />
 
