@@ -3,32 +3,45 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 
 // --- ROBUST ENVIRONMENT VARIABLE INJECTION ---
+// 1. Ensure global process object exists (Polyfill for browser)
 if (typeof window !== 'undefined') {
-  // 1. Ensure global process object exists
-  (window as any).process = (window as any).process || {};
-  (window as any).process.env = (window as any).process.env || {};
+  (window as any).process = (window as any).process || { env: {} };
+}
 
-  try {
-    // 2. Access Vite env vars safely
-    // We use a conditional check: (import.meta && import.meta.env)
-    // This prevents the "Cannot read properties of undefined" error if env is missing.
-    // We keep the string 'import.meta.env.VITE_API_KEY' intact so Vite can replace it during build if the var exists.
-    
-    // @ts-ignore
-    const viteKey = (typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env.VITE_API_KEY : undefined;
+// 2. Safely extract API Key from various potential sources
+try {
+  let key = '';
 
-    if (viteKey && typeof viteKey === 'string' && viteKey.trim().length > 0) {
-      (window as any).process.env.API_KEY = viteKey;
-      console.log(`LifeOS System: API Key injected successfully. (Length: ${viteKey.length})`);
-    } else {
-      console.warn('LifeOS System: VITE_API_KEY is missing or import.meta.env is undefined.');
-      console.warn('1. Check Vercel Environment Variables.');
-      console.warn('2. Ensure the key name is exactly "VITE_API_KEY".');
-      console.warn('3. Redeploy the application after setting the key.');
-    }
-  } catch (e) {
-    console.error('LifeOS Critical: Environment injection crashed.', e);
+  // Attempt 1: Check standard process.env (if available via build time replacement)
+  if (typeof process !== 'undefined' && process.env && process.env.VITE_API_KEY) {
+    key = process.env.VITE_API_KEY;
   }
+
+  // Attempt 2: Check Vite's import.meta.env
+  // We use a specific inner try-catch because simply accessing import.meta can cause syntax errors in some older parsers
+  if (!key) {
+    try {
+      // @ts-ignore
+      if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_KEY) {
+        // @ts-ignore
+        key = import.meta.env.VITE_API_KEY;
+      }
+    } catch (innerErr) {
+      // Ignore errors accessing import.meta
+    }
+  }
+
+  // 3. Inject into the location expected by the App (process.env.API_KEY)
+  if (key && typeof key === 'string' && key.trim().length > 0) {
+    (window as any).process.env.API_KEY = key;
+    console.log(`LifeOS System: API Key injected successfully.`);
+  } else {
+    // Only warn if we are in a development/preview environment where we expect a key
+    console.warn('LifeOS System: VITE_API_KEY not found. AI features may not work.');
+  }
+
+} catch (e) {
+  console.error('LifeOS Critical: Environment injection logic crashed.', e);
 }
 
 // Register Service Worker for PWA/Capacitor
