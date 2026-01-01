@@ -10,10 +10,13 @@ if (typeof window !== 'undefined') {
   (window as any).process.env = (window as any).process.env || {};
   
   try {
-    // VITE_API_KEY is replaced by the build tool (Vite) with the actual string value
-    // defined in your Vercel Environment Variables.
+    // SAFELY access VITE_API_KEY.
+    // We use a conditional check: (import.meta && import.meta.env) ? ... : ...
+    // This prevents the "Cannot read properties of undefined" error if import.meta.env is missing.
+    // However, we still include the exact string 'import.meta.env.VITE_API_KEY' so Vite's build tool can find and replace it.
+    
     // @ts-ignore
-    const apiKey = import.meta.env.VITE_API_KEY;
+    const apiKey = (import.meta && import.meta.env) ? import.meta.env.VITE_API_KEY : "";
     
     if (apiKey && typeof apiKey === 'string' && apiKey.length > 0) {
       (window as any).process.env.API_KEY = apiKey;
@@ -22,6 +25,7 @@ if (typeof window !== 'undefined') {
       console.warn('LifeOS: VITE_API_KEY is missing or empty. Please check Vercel settings and redeploy.');
     }
   } catch (e) {
+    // This catch block handles any other unexpected errors during initialization
     console.error('LifeOS: Failed to initialize environment variables', e);
   }
 }
