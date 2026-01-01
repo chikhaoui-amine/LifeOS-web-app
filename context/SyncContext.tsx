@@ -24,6 +24,9 @@ interface SyncContextType {
 
 const SyncContext = createContext<SyncContextType | undefined>(undefined);
 
+const RESTORE_FLAG = 'lifeos_restore_pending';
+const LAST_PULL_KEY = 'lifeos_last_pull_ts';
+
 export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { settings, isGoogleConnected } = useSettings();
   
@@ -69,7 +72,6 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     
     // IMPORTANT: Never push if we haven't successfully initialized/pulled yet
     if (!isReadyToPush) {
-        console.warn("Skipping sync: Not ready to push yet.");
         return;
     }
 
@@ -84,7 +86,6 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.log("Cloud Sync Successful");
     } catch (e) {
       console.error("Auto-sync failed", e);
-      // Optional: showToast('Sync failed', 'error'); // Can be too noisy
     } finally {
       setIsSyncing(false);
     }
@@ -102,11 +103,16 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await BackupService.performReplace(cloudData);
         setLastSyncedAt(new Date());
         
-        // Prevent infinite loop by setting a session flag
-        sessionStorage.setItem('lifeos_just_restored', 'true');
+        // Mark as recently pulled to prevent loops
+        localStorage.setItem(LAST_PULL_KEY, Date.now().toString());
+        // Set flag for restore handling
+        localStorage.setItem(RESTORE_FLAG, 'true');
+        
         window.location.reload();
       } else {
         console.log("No remote backup found.");
+        // Even if no data, we mark as pulled so we can start pushing
+        localStorage.setItem(LAST_PULL_KEY, Date.now().toString());
       }
     } catch (e) {
       console.error("Pull from cloud failed", e);
@@ -119,21 +125,31 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Initial Sync Logic (The "Handshake")
   useEffect(() => {
     const initSync = async () => {
-        // If we just reloaded from a restore, mark as ready and don't pull again
-        if (sessionStorage.getItem('lifeos_just_restored')) {
-            sessionStorage.removeItem('lifeos_just_restored');
+        // 1. Check if we just reloaded from a restore
+        const restoreFlag = localStorage.getItem(RESTORE_FLAG);
+        if (restoreFlag) {
+            console.log("Sync: Recovered from restore reload.");
+            localStorage.removeItem(RESTORE_FLAG);
             setIsReadyToPush(true);
             setLastSyncedAt(new Date());
             return;
         }
 
         if (isGoogleConnected) {
+            // 2. Safety Check: If we pulled very recently (e.g. < 15 seconds ago), don't pull again.
+            // This prevents the infinite reload loop if the flag mechanism fails.
+            const lastPull = localStorage.getItem(LAST_PULL_KEY);
+            if (lastPull && (Date.now() - parseInt(lastPull) < 15000)) {
+                console.log("Sync: Recently pulled, skipping initial pull to prevent loop.");
+                setIsReadyToPush(true);
+                return;
+            }
+
             try {
                await pullFromCloud();
             } catch(e) { console.error(e); }
             finally { 
-                // Even if pull fails (offline/empty), we eventually allow pushing
-                // But typically only if we know we are the source of truth
+                // Allow pushing after attempt, success or fail
                 setIsReadyToPush(true); 
             }
         } else {
@@ -141,9 +157,10 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
     };
     
-    // Small delay to ensure Google Script is loaded
-    setTimeout(initSync, 1500);
-  }, [isGoogleConnected]); // Removed pullFromCloud dependency to avoid loops
+    // Delay to allow Auth load
+    const timer = setTimeout(initSync, 2000);
+    return () => clearTimeout(timer);
+  }, [isGoogleConnected]); // Intentionally exclude pullFromCloud to avoid recreation loops
 
   // Automated Push (Debounced)
   useEffect(() => {
@@ -152,15 +169,15 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     if (syncTimeout.current) clearTimeout(syncTimeout.current);
     
-    // 2 second debounce
+    // 5 second debounce for auto-save
     syncTimeout.current = setTimeout(() => {
       syncNow();
-    }, 2000);
+    }, 5000);
 
     return () => {
       if (syncTimeout.current) clearTimeout(syncTimeout.current);
     };
-  }, [getCurrentState, isReadyToPush, isGoogleConnected]); // Intentionally exclude syncNow to prevent recursion
+  }, [getCurrentState, isReadyToPush, isGoogleConnected]); 
 
   return (
     <SyncContext.Provider value={{ isSyncing, lastSyncedAt, syncNow, pullFromCloud }}>

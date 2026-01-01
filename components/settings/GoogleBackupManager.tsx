@@ -22,8 +22,7 @@ export const GoogleBackupManager: React.FC = () => {
       await GoogleDriveService.signIn();
       setGoogleConnected(true);
       showToast('Successfully connected to Google Drive', 'success');
-      // Force a pull immediately
-      setTimeout(() => window.location.reload(), 500);
+      // No forced reload here. The SyncContext effect will detect the change in `isGoogleConnected` and trigger the pull.
     } catch (e) {
       console.error(e);
       showToast('Failed to connect to Google Account', 'error');
