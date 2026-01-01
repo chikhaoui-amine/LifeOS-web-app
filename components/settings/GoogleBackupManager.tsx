@@ -7,6 +7,7 @@ import { FirebaseService } from '../../services/FirebaseService';
 import { getTranslation } from '../../utils/translations';
 import { LanguageCode } from '../../types';
 import { useToast } from '../../context/ToastContext';
+import { storage } from '../../utils/storage';
 
 export const GoogleBackupManager: React.FC = () => {
   const { settings } = useSettings();
@@ -43,9 +44,14 @@ export const GoogleBackupManager: React.FC = () => {
   };
 
   const handleDisconnect = async () => {
-    await FirebaseService.signOut();
-    showToast('Signed out', 'info');
-    setAuthError(null);
+    if (window.confirm("Disconnecting will RESET all local data to defaults. Are you sure?")) {
+      await FirebaseService.signOut();
+      await storage.clearAll();
+      showToast('Signed out & Data Reset', 'info');
+      setAuthError(null);
+      // Reload to apply empty state
+      window.location.reload();
+    }
   };
 
   return (
@@ -100,7 +106,7 @@ export const GoogleBackupManager: React.FC = () => {
                 onClick={handleDisconnect}
                 className="text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5"
               >
-                 <LogOut size={14} /> Sign Out
+                 <LogOut size={14} /> Sign Out & Reset
               </button>
            </div>
 
@@ -139,4 +145,3 @@ export const GoogleBackupManager: React.FC = () => {
     </>
   );
 };
-    
