@@ -1,7 +1,7 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { 
-  Bell, Trash2, Plus, Download, Palette, Check, 
+  Bell, Trash2, Plus, Download, Upload, Palette, Check, 
   ChevronDown, ChevronUp, Globe, Cloud, Calendar, Moon, 
   Shield, Cpu, Sparkles, Sun, Edit2
 } from 'lucide-react';
@@ -64,44 +64,76 @@ const Settings: React.FC = () => {
   const { settings, updateSettings } = useSettings();
   const { currentTheme, savedThemes, applyTheme, updateThemePrimaryColor, deleteCustomTheme } = useTheme();
   
-  // Data Contexts
-  const { habits } = useHabits();
+  // Data Contexts - Gather EVERYTHING for backup
+  const { habits, categories: habitCategories } = useHabits();
   const { tasks } = useTasks();
   const { entries: journal } = useJournal();
   const { goals } = useGoals();
-  // Fix: Destructure currency to include in backup data
   const { accounts, transactions, budgets, savingsGoals, currency } = useFinance();
-  // Fix: Destructure foods to include in backup data
   const { recipes, foods, mealPlans, shoppingList } = useMeals();
-  const { logs: sleepLogs } = useSleep();
+  const { logs: sleepLogs, settings: sleepSettings } = useSleep();
   const { timeBlocks } = useTimeBlocks();
-  const { blockedApps, settings: wellnessSettings } = useDigitalWellness();
-  const { prayers, quran, adhkar } = useIslamic();
+  const { blockedApps, settings: wellnessSettings, stats: wellnessStats } = useDigitalWellness();
+  const { prayers, quran, adhkar, settings: islamicSettings } = useIslamic();
   
   const t = useMemo(() => getTranslation((settings?.preferences?.language || 'en') as LanguageCode), [settings?.preferences?.language]);
   const [modalConfig, setModalConfig] = useState<any>({ isOpen: false });
   const [showThemes, setShowThemes] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const allThemes = [...PREBUILT_THEMES, ...savedThemes];
 
   const handleBackupData = () => {
      const data = BackupService.createBackupData(habits, tasks, settings);
      
-     // Attach comprehensive data
+     // Attach comprehensive data from all modules
+     data.habitCategories = habitCategories;
      data.journal = journal;
      data.goals = goals;
-     // Fix: Add currency to finance backup object
      data.finance = { accounts, transactions, budgets, savingsGoals, currency };
-     // Fix: Add foods to meals backup object
      data.meals = { recipes, foods, mealPlans, shoppingList };
      data.sleepLogs = sleepLogs;
+     data.sleepSettings = sleepSettings;
      data.timeBlocks = timeBlocks;
-     data.digitalWellness = { blockedApps, settings: wellnessSettings };
+     data.digitalWellness = { blockedApps, settings: wellnessSettings, stats: wellnessStats };
      data.prayers = prayers;
      data.quran = quran;
      data.adhkar = adhkar;
+     data.islamicSettings = islamicSettings;
+     data.customThemes = savedThemes;
 
      BackupService.downloadBackup(data);
+     showToast('Backup file generated', 'success');
+  };
+
+  const handleRestoreClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const data = await BackupService.readBackupFile(file);
+      
+      setModalConfig({
+        isOpen: true,
+        title: 'Restore Backup',
+        message: 'This will overwrite your current data with the backup file. The app will reload. Are you sure?',
+        type: 'danger',
+        confirmText: 'Restore & Reload',
+        onConfirm: async () => {
+           await BackupService.performReplace(data);
+           window.location.reload();
+        }
+      });
+    } catch (err) {
+      showToast('Invalid backup file format', 'error');
+    }
+    
+    // Reset input
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleResetApp = () => {
@@ -340,6 +372,18 @@ const Settings: React.FC = () => {
             {/* Data Management */}
             <SettingSection title="Data & Privacy">
               <SettingItem label={t.settings.backup} subLabel="Export to JSON (Mobile: Share File)" icon={Download} onClick={handleBackupData} />
+              
+              <div onClick={handleRestoreClick} className="w-full px-5 py-4 flex items-center justify-between text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50 text-gray-900 dark:text-gray-100 cursor-pointer">
+                 <div className="flex items-center gap-3.5">
+                    <div className="p-2 bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 rounded-lg"><Upload size={18} /></div>
+                    <div className="flex flex-col">
+                       <span className="font-medium text-sm sm:text-base">Restore Backup</span>
+                       <span className="text-xs text-gray-400 mt-0.5">Import from JSON file</span>
+                    </div>
+                 </div>
+              </div>
+              <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".json" className="hidden" />
+
               <SettingItem label={t.settings.reset} subLabel="Erase local data" icon={Trash2} type="danger" onClick={handleResetApp} />
             </SettingSection>
 
