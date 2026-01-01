@@ -1,13 +1,12 @@
 
 import React, { useState, useMemo } from 'react';
-import { Plus, Search, Filter, BookOpen, Calendar as CalendarIcon, LayoutGrid, List, Sparkles, TrendingUp, Heart } from 'lucide-react';
+import { Plus, Search, Filter, BookOpen, LayoutGrid, List, Sparkles, TrendingUp, Heart } from 'lucide-react';
 import { useJournal } from '../context/JournalContext';
 import { useSettings } from '../context/SettingsContext';
 import { getTranslation } from '../utils/translations';
 import { JournalEntryCard } from '../components/journal/JournalEntryCard';
 import { JournalForm } from '../components/journal/JournalForm';
 import { JournalStats } from '../components/journal/JournalStats';
-import { JournalCalendar } from '../components/journal/JournalCalendar';
 import { PinModal } from '../components/journal/PinModal';
 import { EmptyState } from '../components/EmptyState';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
@@ -18,7 +17,7 @@ const Journal: React.FC = () => {
   const { settings } = useSettings();
   const t = useMemo(() => getTranslation((settings?.preferences?.language || 'en') as LanguageCode), [settings?.preferences?.language]);
   
-  const [viewMode, setViewMode] = useState<'timeline' | 'calendar' | 'stats'>('timeline');
+  const [viewMode, setViewMode] = useState<'timeline' | 'stats'>('timeline');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -127,12 +126,6 @@ const Journal: React.FC = () => {
                   <List size={16} strokeWidth={2.5} /> {t.journal.timeline}
                </button>
                <button 
-                  onClick={() => setViewMode('calendar')} 
-                  className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap ${viewMode === 'calendar' ? 'bg-primary-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
-               >
-                  <CalendarIcon size={16} strokeWidth={2.5} /> {t.journal.calendar}
-               </button>
-               <button 
                   onClick={() => setViewMode('stats')} 
                   className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap ${viewMode === 'stats' ? 'bg-primary-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
                >
@@ -196,14 +189,6 @@ const Journal: React.FC = () => {
                     ))}
                  </div>
                )
-            )}
-
-            {viewMode === 'calendar' && (
-               <JournalCalendar 
-                  entries={entries}
-                  onDateSelect={() => {}} 
-                  onEntryClick={handleEntryClick}
-               />
             )}
 
             {viewMode === 'stats' && <JournalStats />}

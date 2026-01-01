@@ -1,14 +1,15 @@
 
 import React, { useState, useMemo } from 'react';
-import { Moon, Calendar as CalendarIcon, BarChart2, Plus, ArrowRight, Sun, Edit3, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Moon, Calendar as CalendarIcon, BarChart2, Plus, ArrowRight, Sun, Edit3, Sparkles, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, Info, Activity, Settings, Target, Clock, Zap, HeartPulse } from 'lucide-react';
 import { useSleep } from '../context/SleepContext';
 import { useSettings } from '../context/SettingsContext';
 import { getTranslation } from '../utils/translations';
 import { SleepLogModal } from '../components/sleep/SleepLogModal';
+import { SleepSettingsModal } from '../components/sleep/SleepSettingsModal';
 import { ProgressRing } from '../components/ProgressRing';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
 import { getTodayKey, formatDateKey, getDaysInMonth, isSameMonth, isToday } from '../utils/dateUtils';
-import { BarChart } from '../components/Charts';
+import { LineChart } from '../components/Charts';
 import { LanguageCode } from '../types';
 
 const Sleep: React.FC = () => {
@@ -18,12 +19,24 @@ const Sleep: React.FC = () => {
   
   const [selectedDate, setSelectedDate] = useState(getTodayKey());
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [calendarDate, setCalendarDate] = useState(new Date());
 
   // --- Data Processing ---
   const todayLog = getLogForDate(selectedDate);
   const avgDurationMins = getAverageSleep(7);
   
+  // Get recent logs for advanced analysis (Rolling 7 days for health status)
+  const recentLogs = useMemo(() => {
+    return Array.from({ length: 7 }).map((_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        return getLogForDate(formatDateKey(d));
+    }).filter(Boolean) as any[]; // Need actual log type here, filtering out undefined
+  }, [logs, getLogForDate]);
+
+  const logsLast7Days = recentLogs.length;
+
   const cumulativeDebtHours = useMemo(() => {
     const targetMins = settings.targetHours * 60;
     let debt = 0;
@@ -36,27 +49,142 @@ const Sleep: React.FC = () => {
         }
     }
     return Math.max(0, Math.round(debt / 60));
-  }, [logs, settings.targetHours]);
+  }, [logs, settings.targetHours, getLogForDate]);
+
+  // Enhanced Dynamic Status Logic
+  const healthStatus = useMemo(() => {
+    // 1. Not enough data
+    if (logsLast7Days < 3) {
+        return {
+            type: 'info',
+            title: 'Calibrating Sleep Monitor',
+            message: `Log your sleep for at least 3 days (currently ${logsLast7Days}/3) to unlock personalized health warnings.`,
+            color: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200',
+            icon: <Activity size={24} className="text-blue-600 dark:text-blue-400" />
+        };
+    }
+
+    const avgQuality = recentLogs.reduce((acc, l) => acc + l.qualityRating, 0) / (recentLogs.length || 1);
+    
+    // Calculate Schedule Consistency (Wake Time Variance)
+    // Convert wake times to minutes from midnight
+    let maxWakeDiffMinutes = 0;
+    if (recentLogs.length > 1) {
+        const wakeTimes = recentLogs.map(l => {
+            const d = new Date(l.wakeTime);
+            return d.getHours() * 60 + d.getMinutes();
+        });
+        const minWake = Math.min(...wakeTimes);
+        const maxWake = Math.max(...wakeTimes);
+        maxWakeDiffMinutes = maxWake - minWake;
+    }
+
+    // --- CRITICAL TIERS ---
+
+    // 2. Critical Warning: Debt > 100% of target (one full night lost in a week)
+    if (cumulativeDebtHours >= settings.targetHours) {
+      return { 
+        type: 'critical', 
+        title: 'Severe Sleep Deprivation', 
+        message: `Your sleep debt is ${cumulativeDebtHours} hours—equivalent to a full night lost. Your cognitive function and immune system are likely compromised. Prioritize recovery sleep immediately.`,
+        color: 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-200',
+        icon: <AlertTriangle size={24} className="text-rose-600 dark:text-rose-400 animate-pulse" />
+      };
+    }
+
+    // 3. Burnout Risk: Moderate Debt + Low Quality
+    if (cumulativeDebtHours > (settings.targetHours / 2) && avgQuality < 60) {
+        return {
+            type: 'critical',
+            title: 'Burnout Risk Detected',
+            message: "You're consistently getting low-quality sleep while accumulating debt. This combination accelerates burnout. Consider reviewing your sleep environment.",
+            color: 'bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-900 text-orange-800 dark:text-orange-200',
+            icon: <Zap size={24} className="text-orange-600 dark:text-orange-400" />
+        };
+    }
+
+    // --- WARNING TIERS ---
+
+    // 4. Social Jetlag (Inconsistent Wake Times)
+    if (maxWakeDiffMinutes > 120) { // > 2 hours variation
+        return {
+            type: 'warning',
+            title: 'Irregular Sleep Rhythm',
+            message: `Your wake-up times vary by over ${Math.round(maxWakeDiffMinutes/60)} hours this week. This "Social Jetlag" confuses your circadian rhythm and lowers energy.`,
+            color: 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-200',
+            icon: <Clock size={24} className="text-amber-600 dark:text-amber-400" />
+        };
+    }
+
+    // 5. Moderate Warning: Debt > 50% of target
+    if (cumulativeDebtHours >= (settings.targetHours / 2)) {
+      return { 
+        type: 'warning', 
+        title: 'Sleep Debt Accumulating', 
+        message: `You are currently ${cumulativeDebtHours} hours behind schedule this week. Try going to bed 30 minutes earlier tonight to catch up.`,
+        color: 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-200',
+        icon: <HeartPulse size={24} className="text-amber-600 dark:text-amber-400" />
+      };
+    }
+
+    // 6. Insufficient Daily Average based on User Min setting
+    if (avgDurationMins > 0 && avgDurationMins < settings.minHours * 60) {
+      return { 
+        type: 'warning', 
+        title: 'Insufficient Daily Rest', 
+        message: `Your 7-day average is only ${Math.floor(avgDurationMins/60)}h ${avgDurationMins%60}m, which is below your minimum threshold of ${settings.minHours}h. Consistent sleep deprivation is linked to long-term health risks.`,
+        color: 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900 text-red-800 dark:text-red-200',
+        icon: <AlertTriangle size={24} className="text-red-600 dark:text-red-400" />
+      };
+    }
+
+    // 7. Good Health
+    return {
+        type: 'success',
+        title: 'Healthy Sleep Pattern',
+        message: 'Great job! You are maintaining a consistent sleep schedule and meeting your duration targets.',
+        color: 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200',
+        icon: <CheckCircle2 size={24} className="text-emerald-600 dark:text-emerald-400" />
+    };
+  }, [cumulativeDebtHours, avgDurationMins, logsLast7Days, settings.targetHours, settings.minHours, recentLogs]);
 
   const sleepScore = todayLog ? calculateSleepScore(todayLog) : 0;
 
-  const chartData = useMemo(() => Array.from({ length: 7 }).map((_, i) => {
-     const d = new Date();
-     d.setDate(d.getDate() - (6 - i));
+  // --- Chart Logic: Start Sunday, End Saturday ---
+  
+  // 1. Determine Start of Week (Sunday) based on Selected Date
+  const chartStartDate = useMemo(() => {
+      // Parse YYYY-MM-DD string to Date, fixing timezone issues by appending time
+      const parts = selectedDate.split('-').map(Number);
+      // Create date at local midnight
+      const current = new Date(parts[0], parts[1] - 1, parts[2]);
+      
+      const day = current.getDay(); // 0 (Sun) - 6 (Sat)
+      const diff = current.getDate() - day; // Adjust to Sunday
+      return new Date(current.setDate(diff));
+  }, [selectedDate]);
+
+  // 2. Generate Data for Week (Sun-Sat)
+  const lineChartData = useMemo(() => Array.from({ length: 7 }).map((_, i) => {
+     const d = new Date(chartStartDate);
+     d.setDate(d.getDate() + i);
      const dateKey = formatDateKey(d);
      const log = getLogForDate(dateKey);
-     const dayName = d.toLocaleDateString(globalSettings?.preferences?.language || 'en', { weekday: 'short' });
-     
-     const hrs = log ? log.durationMinutes / 60 : 0;
-     const isTargetMet = hrs >= settings.targetHours;
+     return log ? Number((log.durationMinutes / 60).toFixed(1)) : 0;
+  }), [logs, getLogForDate, chartStartDate]);
 
-     return {
-        label: dayName,
-        value: Number(hrs.toFixed(1)),
-        color: isTargetMet ? 'var(--color-primary-500)' : '#475569',
-        payload: { date: dateKey, isSelected: selectedDate === dateKey }
-     };
-  }), [logs, settings.targetHours, selectedDate, globalSettings?.preferences?.language]);
+  const lineChartLabels = useMemo(() => Array.from({ length: 7 }).map((_, i) => {
+     const d = new Date(chartStartDate);
+     d.setDate(d.getDate() + i);
+     return d.toLocaleDateString(globalSettings?.preferences?.language || 'en', { weekday: 'short' });
+  }), [globalSettings?.preferences?.language, chartStartDate]);
+
+  // 3. Highlight Selected Day
+  const selectedIndex = useMemo(() => {
+      const parts = selectedDate.split('-').map(Number);
+      const selected = new Date(parts[0], parts[1] - 1, parts[2]);
+      return selected.getDay(); // 0 (Sun) - 6 (Sat) corresponds directly to array index
+  }, [selectedDate]);
 
   // Calendar Helpers
   const days = getDaysInMonth(calendarDate);
@@ -71,10 +199,10 @@ const Sleep: React.FC = () => {
      setIsLogModalOpen(false);
   };
 
-  const handleChartSelect = (payload: any) => {
-    if (payload?.date) {
-        setSelectedDate(payload.date);
-    }
+  const handleChartSelect = (index: number) => {
+      const d = new Date(chartStartDate);
+      d.setDate(d.getDate() + index);
+      setSelectedDate(formatDateKey(d));
   };
 
   if (loading) return <LoadingSkeleton count={3} />;
@@ -97,17 +225,40 @@ const Sleep: React.FC = () => {
           <p className="text-gray-500 dark:text-gray-400 mt-1 text-sm sm:text-base">{t.sleep.subtitle}</p>
         </div>
         <div className="flex items-center gap-2">
-           <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-2 py-1 flex items-center gap-2">
-              <CalendarIcon size={14} className="text-slate-400" />
+           <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-3 py-2 flex items-center gap-2 shadow-sm">
+              <CalendarIcon size={16} className="text-slate-400" />
               <input 
                 type="date" 
                 value={selectedDate}
                 onChange={e => setSelectedDate(e.target.value)}
-                className="bg-transparent text-gray-900 dark:text-white text-xs sm:text-sm outline-none focus:ring-0"
+                className="bg-transparent text-gray-900 dark:text-white text-sm font-medium outline-none focus:ring-0"
               />
            </div>
+           <button 
+             onClick={() => setIsSettingsOpen(true)}
+             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-bold shadow-lg shadow-indigo-500/20 transition-all text-xs sm:text-sm active:scale-95"
+             title="Configure Goals"
+           >
+              <Target size={16} /> 
+              <span className="hidden sm:inline">Goals</span>
+           </button>
         </div>
       </header>
+
+      {/* Persistent Status Banner */}
+      <div className={`rounded-[1.5rem] p-5 border border-l-4 flex flex-col sm:flex-row items-start gap-4 shadow-sm transition-all duration-300 ${healthStatus.color}`}>
+         <div className="p-2 bg-white/50 dark:bg-black/20 rounded-xl shrink-0 backdrop-blur-sm">
+            {healthStatus.icon}
+         </div>
+         <div>
+            <h3 className="font-bold text-base sm:text-lg mb-1 flex items-center gap-2">
+               {healthStatus.title}
+            </h3>
+            <p className="text-sm sm:text-base leading-relaxed opacity-90">
+               {healthStatus.message}
+            </p>
+         </div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
          
@@ -188,21 +339,24 @@ const Sleep: React.FC = () => {
                </div>
             </div>
 
-            {/* Weekly Analysis */}
+            {/* Weekly Analysis (Sun -> Sat of Selected Week) */}
             <div className={boxClass}>
                <div className="flex items-center justify-between mb-6">
                   <div className="flex flex-col">
                      <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2 text-sm sm:text-base">
                         <BarChart2 size={18} sm-size={20} className="text-primary-500" /> {t.sleep.trends}
                      </h3>
-                     <p className="text-[10px] sm:text-xs text-gray-400 mt-0.5">Tap a bar to select date</p>
+                     <p className="text-[10px] sm:text-xs text-gray-400 mt-0.5">Target: {settings.targetHours}h | Min: {settings.minHours}h</p>
                   </div>
                </div>
-               <BarChart 
-                 data={chartData} 
-                 height={200} 
-                 onSelect={handleChartSelect}
+               <LineChart 
+                 data={lineChartData} 
+                 labels={lineChartLabels}
                  goalValue={settings.targetHours}
+                 color="#6366f1"
+                 height={220}
+                 onSelect={handleChartSelect}
+                 selectedIndex={selectedIndex}
                />
             </div>
 
@@ -218,9 +372,9 @@ const Sleep: React.FC = () => {
                      {Math.floor(avgDurationMins/60)}h {avgDurationMins%60}m
                   </p>
                </div>
-               <div className={`p-4 sm:p-5 rounded-3xl border backdrop-blur-sm transition-all ${cumulativeDebtHours > 5 ? 'bg-red-50/50 border-red-100 dark:bg-red-950/20 dark:border-red-900/50' : 'bg-green-50/50 border-green-100 dark:bg-green-950/20 dark:border-green-900/50'}`}>
-                  <span className={`text-[9px] sm:text-[10px] font-black uppercase tracking-widest block mb-1 ${cumulativeDebtHours > 5 ? 'text-red-400' : 'text-green-400'}`}>{t.sleep.debt}</span>
-                  <p className={`text-lg sm:text-2xl font-black ${cumulativeDebtHours > 5 ? 'text-red-600' : 'text-green-600'}`}>
+               <div className={`p-4 sm:p-5 rounded-3xl border backdrop-blur-sm transition-all ${cumulativeDebtHours > (settings.targetHours/2) ? 'bg-red-50/50 border-red-100 dark:bg-red-950/20 dark:border-red-900/50' : 'bg-green-50/50 border-green-100 dark:bg-green-950/20 dark:border-green-900/50'}`}>
+                  <span className={`text-[9px] sm:text-[10px] font-black uppercase tracking-widest block mb-1 ${cumulativeDebtHours > (settings.targetHours/2) ? 'text-red-400' : 'text-green-400'}`}>{t.sleep.debt}</span>
+                  <p className={`text-lg sm:text-2xl font-black ${cumulativeDebtHours > (settings.targetHours/2) ? 'text-red-600' : 'text-green-600'}`}>
                      {cumulativeDebtHours}h
                   </p>
                </div>
@@ -256,11 +410,21 @@ const Sleep: React.FC = () => {
                      const log = getLogForDate(dateKey);
                      const isSelected = dateKey === selectedDate;
                      
-                     let dotColor = 'bg-gray-100 dark:bg-slate-800';
+                     let bgClass = '';
+                     let textClass = 'text-gray-500 dark:text-gray-400';
+                     
                      if (log) {
-                        if (log.qualityRating > 85) dotColor = 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]';
-                        else if (log.qualityRating > 60) dotColor = 'bg-primary-500 shadow-[0_0_8px_rgba(var(--color-primary-rgb),0.4)]';
-                        else dotColor = 'bg-slate-400';
+                        textClass = 'text-gray-900 dark:text-white font-black';
+                        if (log.qualityRating >= 85) bgClass = 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400';
+                        else if (log.qualityRating >= 60) bgClass = 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400';
+                        else bgClass = 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400';
+                     } else {
+                        bgClass = 'hover:bg-gray-50 dark:hover:bg-gray-800';
+                     }
+
+                     if (isSelected) {
+                        bgClass = 'ring-2 ring-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 z-10';
+                        textClass = 'text-indigo-600 dark:text-indigo-400 font-black';
                      }
 
                      return (
@@ -270,18 +434,24 @@ const Sleep: React.FC = () => {
                           className={`
                             aspect-square rounded-xl flex flex-col items-center justify-center relative transition-all group
                             ${!isCurrentMonth ? 'opacity-20' : 'opacity-100'}
-                            ${isSelected ? 'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'hover:bg-gray-50 dark:hover:bg-slate-800/50'}
+                            ${bgClass}
                           `}
                         >
-                           <span className={`text-[9px] sm:text-[10px] font-bold ${isDayToday ? 'text-primary-600 dark:text-primary-400' : 'text-gray-500'}`}>
+                           <span className={`text-[10px] sm:text-xs ${textClass}`}>
                               {day.getDate()}
                            </span>
-                           {log && (
-                              <div className={`w-1 h-1 rounded-full mt-0.5 ${dotColor}`} />
+                           {isDayToday && !isSelected && !log && (
+                              <div className="w-1 h-1 rounded-full bg-indigo-500 mt-0.5" />
                            )}
                         </button>
                      );
                   })}
+               </div>
+               
+               <div className="flex gap-4 justify-center mt-6 pt-4 border-t border-gray-100 dark:border-gray-800">
+                  <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-emerald-400" /><span className="text-[9px] text-gray-400 uppercase font-bold">Good</span></div>
+                  <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-amber-400" /><span className="text-[9px] text-gray-400 uppercase font-bold">Fair</span></div>
+                  <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-rose-400" /><span className="text-[9px] text-gray-400 uppercase font-bold">Poor</span></div>
                </div>
             </div>
 
@@ -294,6 +464,12 @@ const Sleep: React.FC = () => {
             initialData={todayLog}
             onSave={handleSaveLog}
             onClose={() => setIsLogModalOpen(false)}
+         />
+      )}
+
+      {isSettingsOpen && (
+         <SleepSettingsModal 
+            onClose={() => setIsSettingsOpen(false)}
          />
       )}
 

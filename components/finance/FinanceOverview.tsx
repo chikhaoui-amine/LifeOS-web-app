@@ -28,7 +28,7 @@ export const FinanceOverview: React.FC<{ onAddTransaction: () => void }> = ({ on
 
   const income = monthlyTransactions.filter(tx => tx.type === 'income').reduce((acc, tx) => acc + tx.amount, 0);
   const expense = monthlyTransactions.filter(tx => tx.type === 'expense').reduce((acc, tx) => acc + tx.amount, 0);
-  const savings = income - expense;
+  const savings = monthlyTransactions.filter(tx => tx.type === 'savings').reduce((acc, tx) => acc + tx.amount, 0);
 
   // Expense by Category Data
   const expensesByCategory: Record<string, number> = {};
@@ -160,7 +160,7 @@ export const FinanceOverview: React.FC<{ onAddTransaction: () => void }> = ({ on
                       
                       <div className="flex items-center gap-2">
                         <span className={`font-bold text-xs sm:text-sm ${isExpense ? 'text-gray-900 dark:text-white' : isSavings ? 'text-blue-600 dark:text-blue-400' : 'text-green-600 dark:text-green-400'}`}>
-                           {isExpense || isSavings ? '-' : '+'}{getFormattedCurrency(tx.amount)}
+                           {isExpense ? '-' : '+'}{getFormattedCurrency(tx.amount)}
                         </span>
                         
                         {/* Delete Button */}

@@ -28,6 +28,7 @@ const SLEEP_SETTINGS_KEY = 'lifeos_sleep_settings_v1';
 
 const DEFAULT_SLEEP_SETTINGS: SleepSettings = {
   targetHours: 8,
+  minHours: 6,
   bedTimeGoal: '23:00',
   wakeTimeGoal: '07:00',
   windDownMinutes: 45
@@ -45,7 +46,10 @@ export const SleepProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const storedSettings = await storage.load<SleepSettings>(SLEEP_SETTINGS_KEY);
 
       if (storedLogs) setLogs(storedLogs);
-      if (storedSettings) setSettings(storedSettings);
+      if (storedSettings) {
+          // Merge with defaults to ensure new properties like minHours exist
+          setSettings({ ...DEFAULT_SLEEP_SETTINGS, ...storedSettings });
+      }
       
       setLoading(false);
     };

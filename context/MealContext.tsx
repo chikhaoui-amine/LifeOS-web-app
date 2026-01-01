@@ -12,13 +12,13 @@ interface MealContextType {
   loading: boolean;
   
   // Recipe Actions
-  addRecipe: (recipe: Omit<Recipe, 'id'>) => Promise<void>;
+  addRecipe: (recipe: Omit<Recipe, 'id'>) => Promise<string>;
   updateRecipe: (id: string, updates: Partial<Recipe>) => Promise<void>;
   deleteRecipe: (id: string) => Promise<void>;
   toggleFavoriteRecipe: (id: string) => Promise<void>;
 
   // Food Actions
-  addFood: (food: Omit<Food, 'id'>) => Promise<void>;
+  addFood: (food: Omit<Food, 'id'>) => Promise<string>;
   updateFood: (id: string, updates: Partial<Food>) => Promise<void>;
   deleteFood: (id: string) => Promise<void>;
   toggleFavoriteFood: (id: string) => Promise<void>;
@@ -75,8 +75,10 @@ export const MealProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // --- Recipe Actions ---
   const addRecipe = async (data: Omit<Recipe, 'id'>) => {
-    const newRecipe = { ...data, id: Date.now().toString() };
+    const id = Date.now().toString() + Math.random().toString(36).substr(2, 5);
+    const newRecipe = { ...data, id };
     setRecipes(prev => [...prev, newRecipe]);
+    return id;
   };
 
   const updateRecipe = async (id: string, updates: Partial<Recipe>) => {
@@ -93,8 +95,10 @@ export const MealProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // --- Food Actions ---
   const addFood = async (data: Omit<Food, 'id'>) => {
-    const newFood = { ...data, id: Date.now().toString() };
+    const id = Date.now().toString() + Math.random().toString(36).substr(2, 5);
+    const newFood = { ...data, id };
     setFoods(prev => [...prev, newFood]);
+    return id;
   };
 
   const updateFood = async (id: string, updates: Partial<Food>) => {

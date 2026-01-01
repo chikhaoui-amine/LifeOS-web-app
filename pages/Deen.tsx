@@ -5,12 +5,12 @@ import { useIslamic } from '../context/IslamicContext';
 import { useSettings } from '../context/SettingsContext';
 import { getTranslation } from '../utils/translations';
 import { SalahTracker } from '../components/islamic/SalahTracker';
-import { TasbihWidget } from '../components/islamic/TasbihWidget';
 import { AthkarTracker } from '../components/islamic/AthkarTracker';
 import { QuranTracker } from '../components/islamic/QuranTracker';
+import { TasbihWidget } from '../components/islamic/TasbihWidget';
 import { IslamicStats } from '../components/islamic/IslamicStats';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
-import { getHijriDate, getHijriKey, getIslamicHoliday } from '../utils/islamicUtils';
+import { getHijriDate, getHijriKey, getIslamicHoliday, getDaysUntilHijriEvent } from '../utils/islamicUtils';
 import { getDaysInMonth, isSameMonth, isToday, formatDateKey } from '../utils/dateUtils';
 import { LanguageCode } from '../types';
 
@@ -32,6 +32,18 @@ const Deen: React.FC = () => {
   
   // Selected Holiday Check
   const selectedHoliday = useMemo(() => getIslamicHoliday(selectedHijri.day, selectedHijri.month), [selectedHijri]);
+
+  // Upcoming Events (Relative to Today)
+  const upcomingEvents = useMemo(() => {
+    const today = new Date();
+    const todayHijri = getHijriDate(today, islamicSettings.hijriAdjustment);
+    
+    return [
+      { name: 'Ramadan', days: getDaysUntilHijriEvent(9, 1, todayHijri, islamicSettings.hijriAdjustment), color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30' },
+      { name: 'Eid al-Fitr', days: getDaysUntilHijriEvent(10, 1, todayHijri, islamicSettings.hijriAdjustment), color: 'text-amber-600 bg-amber-50 dark:bg-amber-900/30' },
+      { name: 'Eid al-Adha', days: getDaysUntilHijriEvent(12, 10, todayHijri, islamicSettings.hijriAdjustment), color: 'text-blue-600 bg-blue-50 dark:bg-blue-900/30' },
+    ].sort((a, b) => a.days - b.days);
+  }, [islamicSettings.hijriAdjustment]);
 
   // Handlers
   const handlePrevMonth = () => {
@@ -156,21 +168,44 @@ const Deen: React.FC = () => {
         </div>
       </div>
 
-      {/* Summary Section (Prayers & Adhkar & Quran) */}
-      <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-500">
-         <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest px-2 flex items-center gap-2">
-            Daily Summary
-         </h3>
+      {/* Main Trackers Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
          
-         <SalahTracker dateKey={selectedDateKey} gregorianDate={selectedDate} />
-         
-         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <AthkarTracker dateKey={selectedDateKey} />
-            <TasbihWidget />
+         {/* Left Column: Prayers & Quran */}
+         <div className="lg:col-span-2 space-y-6">
+            <SalahTracker dateKey={selectedDateKey} gregorianDate={selectedDate} />
+            <QuranTracker />
          </div>
 
-         {/* Quran Tracker Section */}
-         <QuranTracker />
+         {/* Right Column: Tasbih, Athkar & Upcoming Events */}
+         <div className="space-y-6">
+            <TasbihWidget />
+            
+            <AthkarTracker dateKey={selectedDateKey} />
+            
+            {/* Upcoming Events Card */}
+            <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 border border-gray-100 dark:border-gray-700 shadow-sm">
+               <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl text-indigo-600 dark:text-indigo-400">
+                    <Calendar size={20} />
+                  </div>
+                  <h3 className="font-bold text-gray-900 dark:text-white">{t.deen.events}</h3>
+               </div>
+               <div className="space-y-4">
+                  {upcomingEvents.map(event => (
+                    <div key={event.name} className="flex justify-between items-center group">
+                       <div className="flex items-center gap-2">
+                          <Star size={14} className="text-amber-400 fill-current opacity-50 group-hover:opacity-100 transition-opacity" />
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{event.name}</span>
+                       </div>
+                       <span className={`text-[10px] font-bold px-3 py-1 rounded-full ${event.color}`}>
+                          {event.days} Days
+                       </span>
+                    </div>
+                  ))}
+               </div>
+            </div>
+         </div>
       </div>
 
       {/* Stats Section */}

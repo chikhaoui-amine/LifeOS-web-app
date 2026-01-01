@@ -55,6 +55,23 @@ export interface Task {
   createdAt: string;
 }
 
+// --- VISION BOARD SYSTEM ---
+
+export type VisionItemType = 'image' | 'quote' | 'goal_ref';
+
+export interface VisionItem {
+  id: string;
+  type: VisionItemType;
+  content: string; // Image URL or Text
+  caption?: string; // For images
+  subContent?: string; // Author for quotes
+  width: '1' | '2'; // Column span (relative)
+  height: '1' | '2' | '3'; // Height span
+  color?: string; // For quotes
+  linkedGoalId?: string;
+  createdAt: string;
+}
+
 // --- TIME BLOCKING SYSTEM ---
 
 export interface TimeBlock {
@@ -173,7 +190,8 @@ export interface NapLog {
 }
 
 export interface SleepSettings {
-  targetHours: number;
+  targetHours: number; // The Ideal Goal
+  minHours: number;    // The "Danger Zone" threshold
   bedTimeGoal: string; // HH:mm
   wakeTimeGoal: string; // HH:mm
   windDownMinutes: number;
@@ -421,6 +439,7 @@ export interface BackupData {
   tasks: Task[];
   goals?: Goal[];
   journal?: JournalEntry[];
+  visionBoard?: VisionItem[]; // Added
   prayers?: DailyPrayers[];
   quran?: QuranProgress;
   adhkar?: AdhkarProgress[];

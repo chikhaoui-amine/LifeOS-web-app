@@ -2,150 +2,100 @@
 import React, { useMemo } from 'react';
 import { useIslamic } from '../../context/IslamicContext';
 import { useSettings } from '../../context/SettingsContext';
-import { getTranslation } from '../../utils/translations';
-import { StatsCard } from '../StatsCard';
-import { CheckCircle2, BookOpen, Sun, TrendingUp, Activity, AlertCircle } from 'lucide-react';
-import { DonutChart, BarChart } from '../Charts';
+import { Star, Moon } from 'lucide-react';
+import { LineChart } from '../Charts';
 import { getHijriKey } from '../../utils/islamicUtils';
 import { LanguageCode } from '../../types';
 
 export const IslamicStats: React.FC = () => {
-  const { prayers, quran, adhkar, settings: islamicSettings } = useIslamic();
+  const { prayers, adhkar, settings: islamicSettings } = useIslamic();
   const { settings } = useSettings();
-  const t = useMemo(() => getTranslation((settings?.preferences?.language || 'en') as LanguageCode), [settings?.preferences?.language]);
   
-  // --- Calculate Last 7 Days Data ---
-  const chartData = useMemo(() => {
-    const days = [];
+  // --- Calculate Current Week Data (Sunday to Saturday) for Curves ---
+  const currentWeekData = useMemo(() => {
     const today = new Date();
+    const dayOfWeek = today.getDay(); // 0 (Sun) - 6 (Sat)
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - dayOfWeek); // Go back to Sunday
     
-    for (let i = 6; i >= 0; i--) {
-        const d = new Date(today);
-        d.setDate(d.getDate() - i);
+    const data = [];
+    for (let i = 0; i < 7; i++) {
+        const d = new Date(weekStart);
+        d.setDate(d.getDate() + i);
         const key = getHijriKey(d, islamicSettings.hijriAdjustment);
         const dayName = d.toLocaleDateString(settings?.preferences?.language, { weekday: 'short' });
-        
-        const dayPrayer = prayers.find(p => p.date === key);
-        const prayerCount = dayPrayer ? 
-            (dayPrayer.fajr ? 1 : 0) + 
-            (dayPrayer.dhuhr ? 1 : 0) + 
-            (dayPrayer.asr ? 1 : 0) + 
-            (dayPrayer.maghrib ? 1 : 0) + 
-            (dayPrayer.isha ? 1 : 0) : 0;
 
-        days.push({
-            label: dayName,
-            value: prayerCount,
-            color: prayerCount === 5 ? '#10b981' : prayerCount > 0 ? '#3b82f6' : '#e5e7eb',
-            payload: { fullDate: key }
-        });
-    }
-    return days;
-  }, [prayers, islamicSettings.hijriAdjustment, settings?.preferences?.language]);
-
-  const adhkarChartData = useMemo(() => {
-    const days = [];
-    const today = new Date();
-    
-    for (let i = 6; i >= 0; i--) {
-        const d = new Date(today);
-        d.setDate(d.getDate() - i);
-        const key = getHijriKey(d, islamicSettings.hijriAdjustment);
-        const dayName = d.toLocaleDateString(settings?.preferences?.language, { weekday: 'short' });
-        
+        // Adhkar Count (0-3)
         const dayAdhkar = adhkar.find(a => a.date === key);
-        const count = dayAdhkar ? 
+        const adhkarCount = dayAdhkar ? 
             (dayAdhkar.morningCompleted ? 1 : 0) + 
             (dayAdhkar.eveningCompleted ? 1 : 0) + 
             (dayAdhkar.nightCompleted ? 1 : 0) : 0;
 
-        days.push({
-            label: dayName,
-            value: count,
-            color: count === 3 ? '#fbbf24' : count > 0 ? '#fcd34d' : '#f3f4f6',
-            payload: { fullDate: key }
+        // Sunnah Count
+        const dayPrayer = prayers.find(p => p.date === key);
+        const sunnahCount = dayPrayer ?
+            (dayPrayer.sunnahFajr ? 1 : 0) +
+            (dayPrayer.duha ? 1 : 0) +
+            (dayPrayer.sunnahDhuhr ? 1 : 0) +
+            (dayPrayer.sunnahAsr ? 1 : 0) +
+            (dayPrayer.sunnahMaghrib ? 1 : 0) +
+            (dayPrayer.sunnahIsha ? 1 : 0) +
+            (dayPrayer.witr ? 1 : 0) : 0;
+
+        data.push({
+            day: dayName,
+            adhkar: adhkarCount,
+            sunnah: sunnahCount
         });
     }
-    return days;
-  }, [adhkar, islamicSettings.hijriAdjustment, settings?.preferences?.language]);
+    return data;
+  }, [adhkar, prayers, islamicSettings.hijriAdjustment, settings?.preferences?.language]);
 
-  const prayerRate = useMemo(() => {
-    const totalPossible = 7 * 5;
-    const totalDone = chartData.reduce((acc, d) => acc + d.value, 0);
-    return Math.round((totalDone / totalPossible) * 100);
-  }, [chartData]);
-
-  const missedPrayers = useMemo(() => {
-    // Count days with incomplete prayers in recorded history (excluding today)
-    const todayKey = getHijriKey(new Date(), islamicSettings.hijriAdjustment);
-    return prayers.filter(p => {
-       if (p.date === todayKey) return false;
-       const fardh = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'] as const;
-       // A prayer is missed if it's not done AND not qadha performed
-       return fardh.some(f => !p[f] && !p[`${f}Qadha` as keyof typeof p]);
-    }).length;
-  }, [prayers, islamicSettings.hijriAdjustment]);
+  const weekLabels = currentWeekData.map(d => d.day);
+  const weekAdhkarValues = currentWeekData.map(d => d.adhkar);
+  const weekSunnahValues = currentWeekData.map(d => d.sunnah);
 
   return (
     <div className="space-y-6">
        
-       {/* Top Row: Key Metrics */}
-       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-          <StatsCard 
-            title="Consistency" 
-            value={`${prayerRate}%`} 
-            icon={Activity} 
-            color={prayerRate > 80 ? 'emerald' : 'orange'} 
-            subtitle="Last 7 Days" 
-          />
-          <StatsCard 
-            title="Missed Days" 
-            value={missedPrayers} 
-            icon={AlertCircle} 
-            color="red" 
-            subtitle="Pending Makeup" 
-          />
-          <StatsCard 
-            title={t.deen.quran} 
-            value={quran.completedRubus.length} 
-            icon={BookOpen} 
-            color="blue" 
-            subtitle={`/ 240 Rubu'`} 
-          />
-          <StatsCard 
-            title="Adhkar Streak" 
-            value={adhkar.filter(a => a.morningCompleted && a.eveningCompleted).length} 
-            icon={Sun} 
-            color="amber" 
-            subtitle="Full Days" 
-          />
-       </div>
-
        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           
-          {/* Prayer Chart */}
+          {/* Adhkar Curve (Line Chart) */}
           <div className="bg-white dark:bg-gray-800 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
              <div className="mb-6">
                 <h4 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                   <TrendingUp size={18} className="text-emerald-500" /> Prayer History
+                   <Moon size={18} className="text-indigo-500" /> Weekly Adhkar
                 </h4>
-                <p className="text-xs text-gray-500">Prayers performed over the last 7 days.</p>
+                <p className="text-xs text-gray-500">Completed daily adhkar (Sun - Sat).</p>
              </div>
              <div className="flex-1 min-h-[200px]">
-                <BarChart data={chartData} height={200} goalValue={5} />
+                <LineChart 
+                    data={weekAdhkarValues} 
+                    labels={weekLabels} 
+                    color="#6366f1" 
+                    height={200} 
+                    goalValue={3} 
+                />
              </div>
           </div>
 
-          {/* Adhkar Chart */}
+          {/* Sunnah Curve (Line Chart) */}
           <div className="bg-white dark:bg-gray-800 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
              <div className="mb-6">
                 <h4 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                   <Sun size={18} className="text-amber-500" /> Adhkar Habit
+                   <Star size={18} className="text-amber-500" /> Sunnah & Nafl
                 </h4>
-                <p className="text-xs text-gray-500">Daily adhkar consistency.</p>
+                <p className="text-xs text-gray-500">Voluntary prayers (Sun - Sat).</p>
              </div>
              <div className="flex-1 min-h-[200px]">
-                <BarChart data={adhkarChartData} height={200} goalValue={3} />
+                <LineChart 
+                    data={weekSunnahValues} 
+                    labels={weekLabels} 
+                    color="#f59e0b" 
+                    height={200} 
+                    goalValue={5} // Soft goal for sunnahs
+                />
              </div>
           </div>
 

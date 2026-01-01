@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { 
   CalendarDays, ChefHat, ShoppingBasket, Plus, Sparkles, 
-  Droplets, Clock, UtensilsCrossed, Edit2, Minus, Apple, Search
+  Droplets, Clock, UtensilsCrossed, Edit2, Minus, Apple, Search, BarChart2
 } from 'lucide-react';
 import { useMeals } from '../context/MealContext';
 import { useSettings } from '../context/SettingsContext';
@@ -18,6 +18,7 @@ import { AIChefModal } from '../components/meals/AIChefModal';
 import { WaterGoalModal } from '../components/meals/WaterGoalModal';
 import { MealChoiceModal } from '../components/meals/MealChoiceModal';
 import { ConfirmationModal } from '../components/ConfirmationModal';
+import { LineChart } from '../components/Charts';
 import { Recipe, Food, MealType, LanguageCode } from '../types';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
 import { getTodayKey } from '../utils/dateUtils';
@@ -69,7 +70,7 @@ const Meals: React.FC = () => {
     onConfirm: () => void;
   }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
-  const activePlan = useMemo(() => getMealPlanForDate(activeDate), [activeDate, mealPlans]);
+  const activePlan = useMemo(() => getMealPlanForDate(activeDate), [activeDate, mealPlans, getMealPlanForDate]);
   const waterGoal = settings.meals?.waterGoal || 8;
 
   const filteredRecipes = useMemo(() => 
@@ -79,6 +80,47 @@ const Meals: React.FC = () => {
   const filteredFoods = useMemo(() => 
     foods.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase())), 
   [foods, searchQuery]);
+
+  // --- Chart Logic: Weekly View (Sun-Sat) ---
+  const chartStartDate = useMemo(() => {
+      const parts = activeDate.split('-').map(Number);
+      // Create date at local midnight
+      const current = new Date(parts[0], parts[1] - 1, parts[2]);
+      
+      const day = current.getDay(); // 0 (Sun) - 6 (Sat)
+      const diff = current.getDate() - day; // Adjust to Sunday
+      return new Date(current.setDate(diff));
+  }, [activeDate]);
+
+  const hydrationData = useMemo(() => {
+    return Array.from({ length: 7 }).map((_, i) => {
+        const d = new Date(chartStartDate);
+        d.setDate(d.getDate() + i);
+        const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const dayPlan = getMealPlanForDate(dateKey);
+        return dayPlan.waterIntake;
+    });
+  }, [chartStartDate, getMealPlanForDate, mealPlans]); // Added mealPlans dependency to auto-update
+
+  const hydrationLabels = useMemo(() => {
+    return Array.from({ length: 7 }).map((_, i) => {
+        const d = new Date(chartStartDate);
+        d.setDate(d.getDate() + i);
+        return d.toLocaleDateString(settings?.preferences?.language || 'en', { weekday: 'short' });
+    });
+  }, [chartStartDate, settings?.preferences?.language]);
+
+  const selectedIndex = useMemo(() => {
+      const parts = activeDate.split('-').map(Number);
+      const selected = new Date(parts[0], parts[1] - 1, parts[2]);
+      return selected.getDay(); // 0 (Sun) - 6 (Sat)
+  }, [activeDate]);
+
+  const handleChartSelect = (index: number) => {
+      const d = new Date(chartStartDate);
+      d.setDate(d.getDate() + index);
+      setActiveDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+  };
 
   if (loading) return <LoadingSkeleton count={3} />;
 
@@ -160,6 +202,9 @@ const Meals: React.FC = () => {
   const liters = (activePlan.waterIntake * 0.25).toFixed(2);
   const progressPercent = Math.min(100, (activePlan.waterIntake / waterGoal) * 100);
 
+  // Styling for cards
+  const cardClass = "bg-white dark:bg-gray-800 rounded-[2rem] sm:rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden";
+
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-500 pb-20">
       
@@ -203,9 +248,10 @@ const Meals: React.FC = () => {
 
       {viewMode === 'plan' && (
          <div className="space-y-6 sm:space-y-8">
-            <section className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 items-start">
+            <section className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 items-stretch">
+               
                {/* Hydration Interactive Card */}
-               <div className="bg-white dark:bg-gray-800 p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col gap-4 sm:gap-6">
+               <div className={`${cardClass} p-5 sm:p-8 flex flex-col gap-4 sm:gap-6 justify-between h-full`}>
                   <div className="flex items-center justify-between">
                      <div className="flex items-center gap-3 sm:gap-4">
                         <div className="p-2 sm:p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-2xl">
@@ -251,34 +297,48 @@ const Meals: React.FC = () => {
                   </div>
                </div>
 
-               {/* Quick Actions Card */}
-               <div className="bg-white dark:bg-gray-800 p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col justify-between h-full gap-4">
-                  <div className="flex items-center gap-4">
-                     <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 rounded-2xl flex items-center justify-center">
-                        <ShoppingBasket size={24} />
-                     </div>
-                     <div>
-                        <h4 className="font-bold text-gray-900 dark:text-white text-sm sm:text-base">Planning Tool</h4>
-                        <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Add food items from your collection to build your daily plan.</p>
+               {/* Hydration Trends Chart */}
+               <div className={`${cardClass} p-6 flex flex-col h-full bg-[image:radial-gradient(rgba(0,0,0,0.03)_1px,transparent_1px)] dark:bg-[image:radial-gradient(rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:16px_16px]`}>
+                  <div className="flex items-center justify-between mb-6">
+                     <div className="flex flex-col">
+                        <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2 text-sm sm:text-base">
+                           <BarChart2 size={18} sm-size={20} className="text-blue-500" /> Hydration Trends
+                        </h3>
+                        <p className="text-[10px] sm:text-xs text-gray-400 mt-0.5">Weekly Overview</p>
                      </div>
                   </div>
-
-                  <button 
-                     onClick={handleGenerateList}
-                     className="w-full py-4 sm:py-6 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl sm:rounded-[1.5rem] font-black text-xs sm:text-sm uppercase tracking-[0.2em] shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-3 active:scale-95"
-                  >
-                     <ShoppingBasket size={20} sm-size={22} /> Sync Groceries
-                  </button>
+                  <LineChart 
+                    data={hydrationData} 
+                    labels={hydrationLabels}
+                    goalValue={waterGoal}
+                    color="#3b82f6"
+                    height={160}
+                    onSelect={handleChartSelect}
+                    selectedIndex={selectedIndex}
+                  />
                </div>
             </section>
 
-            <PlannerGrid 
-               onAddMeal={(date, type) => { setIsChoiceModalOpen({ date, type }); }} 
-               onRemoveMeal={(date, type) => assignMeal(date, type, null)}
-               onViewRecipe={(id) => { const r = recipes.find(x=>x.id===id); if(r) setSelectedRecipe(r); }}
-               activeDate={activeDate}
-               onDateSelect={setActiveDate}
-            />
+            {/* Sync Button & Grid */}
+            <div className="space-y-4">
+               <div className="flex justify-between items-end px-2">
+                  <h3 className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-tight">Weekly Schedule</h3>
+                  <button 
+                     onClick={handleGenerateList}
+                     className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 active:scale-95"
+                  >
+                     <ShoppingBasket size={16} /> Sync Groceries
+                  </button>
+               </div>
+
+               <PlannerGrid 
+                  onAddMeal={(date, type) => { setIsChoiceModalOpen({ date, type }); }} 
+                  onRemoveMeal={(date, type) => assignMeal(date, type, null)}
+                  onViewRecipe={(id) => { const r = recipes.find(x=>x.id===id); if(r) setSelectedRecipe(r); }}
+                  activeDate={activeDate}
+                  onDateSelect={setActiveDate}
+               />
+            </div>
          </div>
       )}
 

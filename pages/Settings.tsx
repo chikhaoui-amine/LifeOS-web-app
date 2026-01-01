@@ -6,7 +6,6 @@ import {
   Shield, Cpu, Sparkles, Sun, Edit2, Zap, AlertTriangle, Loader2, WifiOff, Terminal
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { GoogleGenAI } from "@google/genai";
 import { useSettings } from '../context/SettingsContext';
 import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
@@ -20,7 +19,6 @@ import { BackupService } from '../services/BackupService';
 import { storage } from '../utils/storage';
 import { LanguageCode } from '../types';
 import { getTranslation } from '../utils/translations';
-import { getApiKey } from '../utils/env';
 
 // Modules
 import { useHabits } from '../context/HabitContext';
@@ -81,9 +79,6 @@ const Settings: React.FC = () => {
   const t = useMemo(() => getTranslation((settings?.preferences?.language || 'en') as LanguageCode), [settings?.preferences?.language]);
   const [modalConfig, setModalConfig] = useState<any>({ isOpen: false });
   const [showThemes, setShowThemes] = useState(false);
-  const [isTestingApi, setIsTestingApi] = useState(false);
-  const [apiStatus, setApiStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [errorMessage, setErrorMessage] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const allThemes = [...PREBUILT_THEMES, ...savedThemes];
@@ -163,48 +158,6 @@ const Settings: React.FC = () => {
       confirmText: 'Delete',
       onConfirm: () => deleteCustomTheme(id)
     });
-  };
-
-  const testConnection = async () => {
-    setIsTestingApi(true);
-    setApiStatus('idle');
-    setErrorMessage('');
-    
-    try {
-      // Use the new reliable robust utility
-      const apiKey = getApiKey();
-      
-      if (!apiKey) {
-        throw new Error("Missing API Key. Please verify VITE_API_KEY is set in Vercel and **Redeploy** to apply changes.");
-      }
-
-      console.log("Testing AI with key ending in: ..." + apiKey.slice(-4));
-
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: 'Reply with one word: Pong',
-      });
-      
-      if (response.text) {
-        setApiStatus('success');
-        showToast('System Online: AI is working perfectly.', 'success');
-      } else {
-        throw new Error("Empty response from model.");
-      }
-    } catch (e: any) {
-      console.error(e);
-      setApiStatus('error');
-      
-      let msg = e.message;
-      if (e.message.includes('403')) msg = "Permission Denied (403). API Key may be invalid.";
-      if (e.message.includes('400')) msg = "Bad Request (400). Check Model Name.";
-      
-      setErrorMessage(msg);
-      showToast(`Error: ${msg}`, 'error');
-    } finally {
-      setIsTestingApi(false);
-    }
   };
 
   return (
@@ -341,60 +294,6 @@ const Settings: React.FC = () => {
         {/* Column 2 */}
         <div className="space-y-6 sm:space-y-8">
             
-            {/* Debug / System */}
-            <SettingSection title="System Status">
-               <div className="bg-white dark:bg-gray-800 p-0 rounded-3xl border-0">
-                 <button 
-                   onClick={testConnection}
-                   disabled={isTestingApi}
-                   className={`w-full flex items-center justify-between px-5 py-4 text-left transition-colors group ${
-                      apiStatus === 'error' ? 'bg-red-50 dark:bg-red-900/10' : 
-                      apiStatus === 'success' ? 'bg-emerald-50 dark:bg-emerald-900/10' : 
-                      'hover:bg-gray-50 dark:hover:bg-gray-700/50'
-                   }`}
-                 >
-                    <div className="flex items-center gap-3.5">
-                       <div className={`p-2 rounded-lg group-hover:scale-110 transition-transform ${
-                          apiStatus === 'error' ? 'bg-red-100 text-red-600 dark:bg-red-900/30' :
-                          apiStatus === 'success' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30' :
-                          'bg-amber-100 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400'
-                       }`}>
-                          {isTestingApi ? <Loader2 size={18} className="animate-spin" /> : 
-                           apiStatus === 'error' ? <WifiOff size={18} /> : 
-                           apiStatus === 'success' ? <Check size={18} /> : <Zap size={18} />}
-                       </div>
-                       <div className="flex flex-col">
-                          <span className={`font-medium text-sm sm:text-base ${apiStatus === 'error' ? 'text-red-700 dark:text-red-300' : apiStatus === 'success' ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-900 dark:text-white'}`}>
-                             {isTestingApi ? 'Connecting...' : apiStatus === 'success' ? 'AI System Operational' : apiStatus === 'error' ? 'Connection Failed' : 'Test AI Connection'}
-                          </span>
-                          <span className="text-xs text-gray-400 mt-0.5">
-                             {apiStatus === 'error' ? 'Click to see solution' : 'Tap to verify API connectivity'}
-                          </span>
-                       </div>
-                    </div>
-                 </button>
-                 
-                 {apiStatus === 'error' && (
-                    <div className="px-5 pb-5 pt-2 animate-in slide-in-from-top-2">
-                       <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-100 dark:border-red-800 text-xs text-red-800 dark:text-red-200">
-                          <p className="font-bold flex items-center gap-2 mb-2"><AlertTriangle size={14} /> Troubleshooting Guide</p>
-                          <ul className="list-disc pl-4 space-y-1 opacity-90">
-                             <li>
-                               <strong>If on Vercel:</strong> Go to Settings &gt; Environment Variables. Add Key: <code>VITE_API_KEY</code>.
-                             </li>
-                             <li>
-                               <strong>IMPORTANT:</strong> You must <strong>Redeploy</strong> (rebuild) your app for the new key to take effect. Saving the variable is not enough!
-                             </li>
-                             <li>
-                               <strong>Error Detail:</strong> {errorMessage}
-                             </li>
-                          </ul>
-                       </div>
-                    </div>
-                 )}
-               </div>
-            </SettingSection>
-
             {/* Cloud */}
             <GoogleBackupManager />
 

@@ -76,7 +76,7 @@ export const AthkarTracker: React.FC<AthkarTrackerProps> = ({ dateKey }) => {
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-3xl p-5 sm:p-6 border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col h-full">
+    <div className="bg-white dark:bg-gray-800 rounded-3xl p-5 sm:p-6 border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
        <div className="flex items-center justify-between mb-4 sm:mb-6">
           <h3 className="font-bold text-gray-900 dark:text-white font-serif text-base sm:text-lg">{t.deen.adhkar}</h3>
           <span className="text-[10px] sm:text-xs text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full">

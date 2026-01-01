@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Habit } from '../types';
 import { getTodayKey, calculateStreak } from '../utils/dateUtils';
@@ -9,7 +10,7 @@ interface HabitContextType {
   habits: Habit[];
   loading: boolean;
   categories: string[]; // New: Global Categories
-  addHabit: (habit: Omit<Habit, 'id' | 'createdAt' | 'completedDates' | 'archived'>) => Promise<void>;
+  addHabit: (habit: Omit<Habit, 'id' | 'createdAt' | 'completedDates' | 'archived'>) => Promise<string>;
   updateHabit: (id: string, updates: Partial<Habit>) => Promise<void>;
   deleteHabit: (id: string) => Promise<void>;
   toggleHabit: (id: string, date?: string) => Promise<void>;
@@ -43,10 +44,6 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       // 2. Load Categories
       const categoriesData = await storage.load<string[]>(CATEGORIES_STORAGE_KEY);
       if (categoriesData !== null) {
-        // If data exists (even if empty array), use it
-        // Note: For now, if empty, we reset to defaults to prevent UI issues, 
-        // but if user intentionally deletes all, we might want to allow it.
-        // Let's allow empty if user explicitly wants, but for safety fallback to default if null.
         if (Array.isArray(categoriesData)) {
             setCategories(categoriesData.length > 0 ? categoriesData : DEFAULT_CATEGORIES);
         }
@@ -74,14 +71,16 @@ export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, [categories, loading]);
 
   const addHabit = async (data: Omit<Habit, 'id' | 'createdAt' | 'completedDates' | 'archived'>) => {
+    const id = Date.now().toString(36) + Math.random().toString(36).substr(2);
     const newHabit: Habit = {
       ...data,
-      id: Date.now().toString(36) + Math.random().toString(36).substr(2),
+      id,
       completedDates: [],
       archived: false,
       createdAt: new Date().toISOString(),
     };
     setHabits(prev => [...prev, newHabit]);
+    return id;
   };
 
   const updateHabit = async (id: string, updates: Partial<Habit>) => {
