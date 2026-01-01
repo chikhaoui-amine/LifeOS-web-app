@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { GoogleGenAI, Type } from "@google/genai";
 import { X, Sparkles, BrainCircuit, Loader2, AlertCircle, ArrowRight, Lightbulb } from 'lucide-react';
 import { Goal, GoalType } from '../../types';
+import { getApiKey } from '../../utils/env';
 
 interface AIGoalPlannerModalProps {
   onGoalGenerated: (goal: Partial<Goal>) => void;
@@ -28,9 +29,9 @@ export const AIGoalPlannerModal: React.FC<AIGoalPlannerModalProps> = ({ onGoalGe
     setIsGenerating(true);
     setError('');
 
-    const apiKey = process.env.API_KEY;
+    const apiKey = getApiKey();
     if (!apiKey) {
-      setError("System Error: VITE_API_KEY is missing in your Vercel settings.");
+      setError("System Error: API Key not found. Please check Settings > Vercel Variables.");
       setIsGenerating(false);
       return;
     }
@@ -92,7 +93,7 @@ export const AIGoalPlannerModal: React.FC<AIGoalPlannerModalProps> = ({ onGoalGe
       console.error("AI Goal Planning Error:", err);
       let msg = "The coach is busy right now. Please try again.";
       if (err.message.includes('403') || err.message.includes('API key')) {
-         msg = "API Key Invalid. Check VITE_API_KEY in Vercel.";
+         msg = "API Key Invalid. Check Settings.";
       }
       setError(msg);
     } finally {

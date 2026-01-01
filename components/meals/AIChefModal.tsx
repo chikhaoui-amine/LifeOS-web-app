@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { X, Sparkles, ChefHat, Loader2, AlertCircle } from 'lucide-react';
 import { Recipe } from '../../types';
+import { getApiKey } from '../../utils/env';
 
 interface AIChefModalProps {
   onRecipeGenerated: (recipe: Partial<Recipe>) => void;
@@ -20,9 +21,10 @@ export const AIChefModal: React.FC<AIChefModalProps> = ({ onRecipeGenerated, onC
     setIsGenerating(true);
     setError('');
 
-    const apiKey = process.env.API_KEY;
+    const apiKey = getApiKey();
+    
     if (!apiKey) {
-      setError("System Error: VITE_API_KEY is missing in your Vercel settings.");
+      setError("System Error: API Key not found. Please check Settings > Vercel Variables.");
       setIsGenerating(false);
       return;
     }
@@ -89,7 +91,7 @@ export const AIChefModal: React.FC<AIChefModalProps> = ({ onRecipeGenerated, onC
       console.error("AI Generation Error:", err);
       let msg = "The chef is having trouble hearing you.";
       if (err.message.includes('403') || err.message.includes('API key')) {
-         msg = "API Key Invalid. Check VITE_API_KEY in Vercel.";
+         msg = "API Key Invalid. Check Settings.";
       }
       setError(msg);
     } finally {

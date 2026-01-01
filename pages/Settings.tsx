@@ -20,6 +20,7 @@ import { BackupService } from '../services/BackupService';
 import { storage } from '../utils/storage';
 import { LanguageCode } from '../types';
 import { getTranslation } from '../utils/translations';
+import { getApiKey } from '../utils/env';
 
 // Modules
 import { useHabits } from '../context/HabitContext';
@@ -170,21 +171,8 @@ const Settings: React.FC = () => {
     setErrorMessage('');
     
     try {
-      let apiKey = process.env.API_KEY;
-      
-      // FALLBACK: If process.env is empty, try direct access as a backup check
-      // This helps diagnose if the issue is 'key missing' vs 'injection failed'
-      if (!apiKey) {
-         try {
-            // @ts-ignore
-            apiKey = import.meta.env.VITE_API_KEY;
-            if (apiKey) {
-               console.log("LifeOS Debug: Found key in import.meta.env, but process.env injection failed.");
-               // Fix it temporarily for this session
-               (window as any).process.env.API_KEY = apiKey;
-            }
-         } catch(e) {}
-      }
+      // Use the new reliable robust utility
+      const apiKey = getApiKey();
       
       if (!apiKey) {
         throw new Error("Missing API Key. Please verify VITE_API_KEY is set in Vercel and **Redeploy** to apply changes.");
