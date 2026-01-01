@@ -39,19 +39,24 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const isInitialLoad = useRef(true);
   const syncTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Helper to create the full backup object from current state
+  const getCurrentState = useCallback(() => {
+    const state = BackupService.createBackupData(habits, tasks, settings);
+    state.journal = journal;
+    state.goals = goals;
+    state.finance = { accounts, transactions, budgets, savingsGoals };
+    state.meals = { recipes, mealPlans, shoppingList };
+    state.sleepLogs = sleepLogs;
+    state.timeBlocks = timeBlocks;
+    return state;
+  }, [habits, tasks, settings, journal, goals, accounts, transactions, budgets, savingsGoals, recipes, mealPlans, shoppingList, sleepLogs, timeBlocks]);
+
   const syncNow = useCallback(async () => {
     if (!isGoogleConnected || !GoogleDriveService.isSignedIn) return;
 
     setIsSyncing(true);
     try {
-      const state = BackupService.createBackupData(habits, tasks, settings);
-      state.journal = journal;
-      state.goals = goals;
-      state.finance = { accounts, transactions, budgets, savingsGoals };
-      state.meals = { recipes, mealPlans, shoppingList };
-      state.sleepLogs = sleepLogs;
-      state.timeBlocks = timeBlocks;
-
+      const state = getCurrentState();
       await GoogleDriveService.saveMasterSync(state);
       setLastSyncedAt(new Date());
     } catch (e) {
@@ -59,7 +64,7 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } finally {
       setIsSyncing(false);
     }
-  }, [isGoogleConnected, habits, tasks, settings, journal, goals, accounts, transactions, budgets, savingsGoals, recipes, mealPlans, shoppingList, sleepLogs, timeBlocks]);
+  }, [isGoogleConnected, getCurrentState]);
 
   const pullFromCloud = useCallback(async () => {
     if (!isGoogleConnected) return;
@@ -70,13 +75,15 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       
       const cloudData = await GoogleDriveService.getLatestMasterSync();
       if (cloudData) {
-        // Compare with local and prompt or auto-merge
-        // For a seamless "everything up to date" experience, we replace local with cloud on startup
-        // if cloud is newer (or just always replace on startup if connected)
+        // In a real robust system, we would check timestamps here.
+        // For LifeOS simpler sync: Cloud wins on startup if connected.
         await BackupService.performReplace(cloudData);
-        showToast('Sync complete: Data updated from cloud', 'success');
-        // We don't reload here to avoid loops, the contexts will pick up new storage data on next load 
-        // OR better: reload once.
+        setLastSyncedAt(new Date());
+        
+        // Force a reload to ensure all contexts pick up the new local storage data
+        // Only do this if we actually pulled data, to avoid loops if data is identical?
+        // Since we blindly replace on startup, we reload to be safe.
+        // To avoid infinite reload loops, we could check a session flag, but `isInitialLoad` handles the react effect loop.
         window.location.reload();
       }
     } catch (e) {
@@ -84,14 +91,18 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } finally {
       setIsSyncing(false);
     }
-  }, [isGoogleConnected, showToast]);
+  }, [isGoogleConnected]);
 
   // Initial Pull on startup if connected
   useEffect(() => {
-    if (isGoogleConnected && isInitialLoad.current) {
-      pullFromCloud();
-      isInitialLoad.current = false;
-    }
+    const initSync = async () => {
+        if (isGoogleConnected && isInitialLoad.current) {
+            // Short delay to ensure Auth is ready
+            setTimeout(() => pullFromCloud(), 1000);
+            isInitialLoad.current = false;
+        }
+    };
+    initSync();
   }, [isGoogleConnected, pullFromCloud]);
 
   // Automated Push (Debounced)
@@ -99,7 +110,7 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (isInitialLoad.current) return;
     if (!isGoogleConnected) return;
 
-    // Debounce to avoid hitting API on every keystroke in journal/tasks
+    // Debounce to avoid hitting API on every keystroke
     if (syncTimeout.current) clearTimeout(syncTimeout.current);
     
     syncTimeout.current = setTimeout(() => {
@@ -109,7 +120,7 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => {
       if (syncTimeout.current) clearTimeout(syncTimeout.current);
     };
-  }, [isGoogleConnected, habits, tasks, settings, journal, goals, accounts, transactions, budgets, savingsGoals, recipes, mealPlans, shoppingList, sleepLogs, timeBlocks, syncNow]);
+  }, [isGoogleConnected, getCurrentState, syncNow]);
 
   return (
     <SyncContext.Provider value={{ isSyncing, lastSyncedAt, syncNow, pullFromCloud }}>

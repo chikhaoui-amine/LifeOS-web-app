@@ -92,9 +92,15 @@
       .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
     </style>
     <script>
-      window.process = { env: { API_KEY: "AIzaSyBrhp_DuvPz8Fi9micUWlcx1ae5wTmhEcU" } };
+      // Robust Environment Shim for Vercel/Production
+      window.process = window.process || {};
+      window.process.env = window.process.env || {};
+      // Fallback if not set by build system
+      if (!window.process.env.API_KEY) {
+        window.process.env.API_KEY = "AIzaSyBrhp_DuvPz8Fi9micUWlcx1ae5wTmhEcU";
+      }
     </script>
-  <script type="importmap">
+    <script type="importmap">
 {
   "imports": {
     "react": "https://esm.sh/react@^19.2.3",

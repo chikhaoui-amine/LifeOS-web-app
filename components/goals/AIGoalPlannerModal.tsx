@@ -29,7 +29,9 @@ export const AIGoalPlannerModal: React.FC<AIGoalPlannerModalProps> = ({ onGoalGe
     setError('');
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      // Use fallback to window.process if process.env is optimized away by build
+      const apiKey = process.env.API_KEY || (window as any).process?.env?.API_KEY;
+      const ai = new GoogleGenAI({ apiKey });
       
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
