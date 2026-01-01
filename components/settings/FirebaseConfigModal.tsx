@@ -13,9 +13,7 @@ export const FirebaseConfigModal: React.FC<FirebaseConfigModalProps> = ({ onClos
 
   const handleSave = () => {
     try {
-      // Allow user to paste the whole object or just the JSON
       let cleanInput = jsonInput;
-      // Basic cleanup if they pasted JS code like "const firebaseConfig = {...}"
       if (cleanInput.includes('=')) {
         cleanInput = cleanInput.substring(cleanInput.indexOf('=') + 1);
       }
@@ -23,12 +21,6 @@ export const FirebaseConfigModal: React.FC<FirebaseConfigModalProps> = ({ onClos
         cleanInput = cleanInput.trim().slice(0, -1);
       }
 
-      // Allow loose JSON (keys without quotes) by using a rigorous parser or simple evaluation if safe, 
-      // but for strictness, we'll try JSON.parse first.
-      // Since users might copy from Firebase console which provides JS object syntax (keys not quoted),
-      // we might need to instruct them to paste valid JSON or handle the object syntax manually.
-      // For simplicity in this demo, let's ask for the values or valid JSON.
-      
       const config = JSON.parse(cleanInput);
       
       if (!config.apiKey || !config.projectId) {
@@ -45,7 +37,6 @@ export const FirebaseConfigModal: React.FC<FirebaseConfigModalProps> = ({ onClos
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div className="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-lg shadow-2xl border border-gray-100 dark:border-gray-800 flex flex-col overflow-hidden">
         
-        {/* Header */}
         <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-900">
            <div>
               <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center gap-2">

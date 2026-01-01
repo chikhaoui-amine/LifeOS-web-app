@@ -19,7 +19,7 @@ interface SyncContextType {
   isSyncing: boolean;
   lastSyncedAt: Date | null;
   user: User | null;
-  syncNow: () => Promise<void>; // Manual force push
+  syncNow: () => Promise<void>; 
 }
 
 const SyncContext = createContext<SyncContextType | undefined>(undefined);
@@ -45,7 +45,7 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [user, setUser] = useState<User | null>(null);
   
-  // Ref to prevent "saving" data that we just "received" from the cloud
+  // Flag to prevent the auto-save effect from triggering when we just loaded data from cloud
   const isRestoringRef = useRef(false);
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -62,20 +62,31 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     if (!user) return;
 
+    console.log("Subscribing to Firestore updates...");
     const unsubscribe = FirebaseService.subscribeToUserData(async (cloudData) => {
       console.log("Sync: Cloud data received, updating local...");
       
-      // Set flag to prevent the 'useEffect' below from pushing this data back to cloud
+      // Set flag to prevent the 'auto-save' effect below from pushing this data back to cloud immediately
       isRestoringRef.current = true;
       setIsSyncing(true);
 
       try {
         await BackupService.performReplace(cloudData);
         setLastSyncedAt(new Date());
+        showToast('Data synced from cloud', 'success');
         
-        // Notify all contexts to reload from localStorage
-        window.dispatchEvent(new Event('lifeos-sync-complete'));
-        showToast('Data synced from other device', 'success');
+        // Force reload to ensure all contexts pick up the new localStorage data
+        // Ideally contexts would listen to storage events, but a reload is safer for a "Full Sync"
+        // To avoid jarring reload, we rely on BackupService to update storage, 
+        // and ideally Contexts should re-read storage.
+        // Since React Contexts hold state in memory, we need to trigger them to reload.
+        // The simplest way without refactoring every context is a quick reload or event bus.
+        // For this implementation, we will dispatch a custom event that contexts *could* listen to,
+        // but for robustness in this architecture, a reload is often preferred for full state replacement.
+        setTimeout(() => {
+             window.location.reload(); 
+        }, 1000);
+
       } catch (e) {
         console.error("Sync Error:", e);
       } finally {
@@ -83,7 +94,7 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // Allow pushes again after a short delay
         setTimeout(() => {
           isRestoringRef.current = false;
-        }, 2000);
+        }, 3000);
       }
     });
 
@@ -107,12 +118,16 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [habits, tasks, settings, journal, goals, accounts, transactions, budgets, savingsGoals, recipes, mealPlans, shoppingList, sleepLogs, timeBlocks, blockedApps, wellnessSettings, prayers, quran, adhkar]);
 
   // 3. Auto-Save (Device -> Cloud)
+  // This triggers whenever any dependency (app state) changes
   useEffect(() => {
     if (!user) return;
-    if (isRestoringRef.current) return; // Don't save if we are currently restoring
+    
+    // If we are currently restoring data from cloud, DO NOT push back
+    if (isRestoringRef.current) return; 
 
     if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
 
+    // Debounce save (wait 5 seconds of inactivity before pushing)
     syncTimeoutRef.current = setTimeout(async () => {
       if (isRestoringRef.current) return; // Double check
 
@@ -127,7 +142,7 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } finally {
         setIsSyncing(false);
       }
-    }, 5000); // 5 second debounce
+    }, 5000); 
 
     return () => {
       if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
@@ -141,7 +156,7 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const data = getCurrentState();
         await FirebaseService.saveUserData(data);
         setLastSyncedAt(new Date());
-        showToast('Force sync complete', 'success');
+        showToast('Cloud save complete', 'success');
     } catch(e) {
         showToast('Sync failed', 'error');
     } finally {
