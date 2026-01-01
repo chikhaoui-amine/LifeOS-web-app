@@ -7,27 +7,26 @@ import { BackupData } from '../types';
  */
 
 // --- CONFIGURATION ---
-// Credentials provided by user
 const CLIENT_ID = '974151663350-ug6a9u07gp4fmjb7gmhmf35jo5fvbtra.apps.googleusercontent.com'; 
 const API_KEY = 'AIzaSyBrhp_DuvPz8Fi9micUWlcx1ae5wTmhEcU'; 
 
 const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
-const SCOPES = 'https://www.googleapis.com/auth/drive.file'; // Only access files created by this app
+const SCOPES = 'https://www.googleapis.com/auth/drive.file'; 
 const MASTER_SYNC_FILENAME = 'lifeos_sync_master.json';
+const TOKEN_STORAGE_KEY = 'lifeos_g_token';
 
 export interface GoogleDriveFile {
   id: string;
   name: string;
   createdTime: string;
   size?: string;
-  data?: any; // populated only on download
+  data?: any; 
 }
 
 let tokenClient: any;
 let gapiInited = false;
 let gisInited = false;
 
-// Types for window globals
 declare global {
   interface Window {
     gapi: any;
@@ -43,6 +42,14 @@ export const GoogleDriveService = {
    */
   initialize: async (): Promise<void> => {
     return new Promise((resolve) => {
+      const checkInit = () => {
+        if (gapiInited && gisInited) {
+          GoogleDriveService.tryRestoreToken();
+          resolve();
+          return;
+        }
+      };
+
       if (gapiInited && gisInited) {
         resolve();
         return;
@@ -56,7 +63,7 @@ export const GoogleDriveService = {
               discoveryDocs: [DISCOVERY_DOC],
             });
             gapiInited = true;
-            if (gisInited) resolve();
+            checkInit();
           });
       }
 
@@ -69,32 +76,61 @@ export const GoogleDriveService = {
                if (resp.error !== undefined) {
                  throw (resp);
                }
-               GoogleDriveService.isSignedIn = true;
+               GoogleDriveService.handleTokenResponse(resp);
             },
           });
           gisInited = true;
-          if (gapiInited) resolve();
+          checkInit();
       }
     });
+  },
+
+  handleTokenResponse: (tokenResponse: any) => {
+    GoogleDriveService.isSignedIn = true;
+    // Cache token with expiry
+    const expiry = Date.now() + (tokenResponse.expires_in * 1000);
+    const storedToken = {
+        value: tokenResponse,
+        expiry: expiry
+    };
+    localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(storedToken));
+  },
+
+  tryRestoreToken: () => {
+    try {
+        const stored = localStorage.getItem(TOKEN_STORAGE_KEY);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Date.now() < parsed.expiry && window.gapi) {
+                window.gapi.client.setToken(parsed.value);
+                GoogleDriveService.isSignedIn = true;
+                console.log("Restored Google Token from cache");
+            } else {
+                localStorage.removeItem(TOKEN_STORAGE_KEY);
+                GoogleDriveService.isSignedIn = false;
+            }
+        }
+    } catch (e) {
+        console.error("Failed to restore token", e);
+    }
   },
 
   signIn: async (): Promise<boolean> => {
     await GoogleDriveService.initialize();
     
+    // If valid token exists, skip popup
+    if (GoogleDriveService.isSignedIn) return true;
+
     return new Promise((resolve, reject) => {
       try {
-        // Trigger the popup
         tokenClient.callback = (resp: any) => {
           if (resp.error) {
             reject(resp);
           }
-          GoogleDriveService.isSignedIn = true;
-          // Store token in session for simple persistence across reloads in same tab
-          // (Note: In production, handle token expiry/refresh)
+          GoogleDriveService.handleTokenResponse(resp);
           resolve(true);
         };
         
-        // Request access token
         tokenClient.requestAccessToken({ prompt: 'consent' });
       } catch (e) {
         console.error("Sign in error", e);
@@ -104,24 +140,26 @@ export const GoogleDriveService = {
   },
 
   signOut: async (): Promise<void> => {
-    if (window.google && window.google.accounts && GoogleDriveService.isSignedIn) {
+    if (window.google && window.google.accounts) {
        const token = window.gapi.client.getToken();
        if (token !== null) {
          window.google.accounts.oauth2.revoke(token.access_token, () => {});
          window.gapi.client.setToken('');
+         localStorage.removeItem(TOKEN_STORAGE_KEY);
          GoogleDriveService.isSignedIn = false;
        }
     }
   },
 
-  // Real-time Master Sync logic
   saveMasterSync: async (data: BackupData): Promise<void> => {
-    if (!GoogleDriveService.isSignedIn) return;
+    if (!GoogleDriveService.isSignedIn) {
+        // Try to restore silently before failing
+        await GoogleDriveService.initialize();
+        if (!GoogleDriveService.isSignedIn) return; 
+    }
     
     try {
-      // Check if master file exists
       const existing = await GoogleDriveService.findFileByName(MASTER_SYNC_FILENAME);
-      
       if (existing) {
         await GoogleDriveService.updateFile(existing.id, data);
       } else {
@@ -129,11 +167,15 @@ export const GoogleDriveService = {
       }
     } catch (e) {
       console.error("Failed to save master sync", e);
+      throw e;
     }
   },
 
   getLatestMasterSync: async (): Promise<BackupData | null> => {
-    if (!GoogleDriveService.isSignedIn) return null;
+    if (!GoogleDriveService.isSignedIn) {
+        await GoogleDriveService.initialize();
+        if (!GoogleDriveService.isSignedIn) return null;
+    }
 
     try {
       const existing = await GoogleDriveService.findFileByName(MASTER_SYNC_FILENAME);
@@ -146,35 +188,30 @@ export const GoogleDriveService = {
     return null;
   },
 
-  /**
-   * Helper to find a file by exact name
-   */
   findFileByName: async (name: string): Promise<GoogleDriveFile | null> => {
-    const response = await window.gapi.client.drive.files.list({
-      q: `name = '${name}' and trashed = false`,
-      fields: 'files(id, name, createdTime, size)',
-    });
-    const files = response.result.files;
-    if (files && files.length > 0) {
-      return files[0];
+    try {
+        const response = await window.gapi.client.drive.files.list({
+        q: `name = '${name}' and trashed = false`,
+        fields: 'files(id, name, createdTime, size)',
+        });
+        const files = response.result.files;
+        if (files && files.length > 0) {
+        return files[0];
+        }
+        return null;
+    } catch (e) {
+        // Token might be invalid despite check
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+        GoogleDriveService.isSignedIn = false;
+        throw e;
     }
-    return null;
   },
 
-  /**
-   * Upload a new file (create)
-   */
   uploadBackup: async (data: BackupData, filename?: string): Promise<string> => {
-    if (!GoogleDriveService.isSignedIn) throw new Error("Not signed in");
-
-    const finalName = filename || `LifeOS_Backup_${new Date().toISOString().split('T')[0]}_${Date.now()}.json`;
+    const finalName = filename || `LifeOS_Backup_${new Date().toISOString()}.json`;
     const fileContent = JSON.stringify(data);
-    
     const file = new Blob([fileContent], { type: 'application/json' });
-    const metadata = {
-      name: finalName,
-      mimeType: 'application/json',
-    };
+    const metadata = { name: finalName, mimeType: 'application/json' };
 
     const accessToken = window.gapi.client.getToken().access_token;
     const form = new FormData();
@@ -191,16 +228,11 @@ export const GoogleDriveService = {
     return json.id;
   },
 
-  /**
-   * Update existing file content
-   */
   updateFile: async (fileId: string, data: BackupData): Promise<void> => {
     const fileContent = JSON.stringify(data);
     const file = new Blob([fileContent], { type: 'application/json' });
-    
     const accessToken = window.gapi.client.getToken().access_token;
     
-    // Simple upload for update (media only)
     await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
       method: 'PATCH',
       headers: new Headers({ 
@@ -211,26 +243,7 @@ export const GoogleDriveService = {
     });
   },
 
-  listFiles: async (): Promise<GoogleDriveFile[]> => {
-    if (!GoogleDriveService.isSignedIn) throw new Error("Not signed in");
-    
-    try {
-      const response = await window.gapi.client.drive.files.list({
-        pageSize: 10,
-        fields: 'files(id, name, createdTime, size)',
-        orderBy: 'createdTime desc',
-        q: "name contains 'LifeOS_Backup' and trashed = false" // Filter for manual backups only
-      });
-      return response.result.files;
-    } catch (e) {
-      console.error("List files error", e);
-      return [];
-    }
-  },
-
   downloadFile: async (fileId: string): Promise<BackupData> => {
-     if (!GoogleDriveService.isSignedIn) throw new Error("Not signed in");
-     
      try {
        const response = await window.gapi.client.drive.files.get({
          fileId: fileId,

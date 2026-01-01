@@ -9,6 +9,8 @@ import { useFinance } from './FinanceContext';
 import { useMeals } from './MealContext';
 import { useSleep } from './SleepContext';
 import { useTimeBlocks } from './TimeBlockContext';
+import { useDigitalWellness } from './DigitalWellnessContext';
+import { useIslamic } from './IslamicContext';
 import { GoogleDriveService } from '../services/GoogleDriveService';
 import { BackupService } from '../services/BackupService';
 import { useToast } from './ToastContext';
@@ -23,7 +25,9 @@ interface SyncContextType {
 const SyncContext = createContext<SyncContextType | undefined>(undefined);
 
 export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { settings, isGoogleConnected, updateSettings } = useSettings();
+  const { settings, isGoogleConnected } = useSettings();
+  
+  // Data Contexts
   const { habits } = useHabits();
   const { tasks } = useTasks();
   const { entries: journal } = useJournal();
@@ -32,14 +36,19 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const { recipes, mealPlans, shoppingList } = useMeals();
   const { logs: sleepLogs } = useSleep();
   const { timeBlocks } = useTimeBlocks();
+  const { blockedApps, settings: wellnessSettings } = useDigitalWellness();
+  const { prayers, quran, adhkar } = useIslamic();
+  
   const { showToast } = useToast();
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
-  const isInitialLoad = useRef(true);
+  
+  // Safety flags
+  const [isReadyToPush, setIsReadyToPush] = useState(false);
   const syncTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Helper to create the full backup object from current state
+  // Helper to create the full backup object
   const getCurrentState = useCallback(() => {
     const state = BackupService.createBackupData(habits, tasks, settings);
     state.journal = journal;
@@ -48,23 +57,38 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     state.meals = { recipes, mealPlans, shoppingList };
     state.sleepLogs = sleepLogs;
     state.timeBlocks = timeBlocks;
+    state.digitalWellness = { blockedApps, settings: wellnessSettings };
+    state.prayers = prayers;
+    state.quran = quran;
+    state.adhkar = adhkar;
     return state;
-  }, [habits, tasks, settings, journal, goals, accounts, transactions, budgets, savingsGoals, recipes, mealPlans, shoppingList, sleepLogs, timeBlocks]);
+  }, [habits, tasks, settings, journal, goals, accounts, transactions, budgets, savingsGoals, recipes, mealPlans, shoppingList, sleepLogs, timeBlocks, blockedApps, wellnessSettings, prayers, quran, adhkar]);
 
   const syncNow = useCallback(async () => {
-    if (!isGoogleConnected || !GoogleDriveService.isSignedIn) return;
+    if (!isGoogleConnected) return;
+    
+    // IMPORTANT: Never push if we haven't successfully initialized/pulled yet
+    if (!isReadyToPush) {
+        console.warn("Skipping sync: Not ready to push yet.");
+        return;
+    }
 
     setIsSyncing(true);
     try {
+      // Ensure auth
+      if (!GoogleDriveService.isSignedIn) await GoogleDriveService.signIn();
+      
       const state = getCurrentState();
       await GoogleDriveService.saveMasterSync(state);
       setLastSyncedAt(new Date());
+      console.log("Cloud Sync Successful");
     } catch (e) {
       console.error("Auto-sync failed", e);
+      // Optional: showToast('Sync failed', 'error'); // Can be too noisy
     } finally {
       setIsSyncing(false);
     }
-  }, [isGoogleConnected, getCurrentState]);
+  }, [isGoogleConnected, isReadyToPush, getCurrentState]);
 
   const pullFromCloud = useCallback(async () => {
     if (!isGoogleConnected) return;
@@ -75,52 +99,68 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       
       const cloudData = await GoogleDriveService.getLatestMasterSync();
       if (cloudData) {
-        // In a real robust system, we would check timestamps here.
-        // For LifeOS simpler sync: Cloud wins on startup if connected.
         await BackupService.performReplace(cloudData);
         setLastSyncedAt(new Date());
         
-        // Force a reload to ensure all contexts pick up the new local storage data
-        // Only do this if we actually pulled data, to avoid loops if data is identical?
-        // Since we blindly replace on startup, we reload to be safe.
-        // To avoid infinite reload loops, we could check a session flag, but `isInitialLoad` handles the react effect loop.
+        // Prevent infinite loop by setting a session flag
+        sessionStorage.setItem('lifeos_just_restored', 'true');
         window.location.reload();
+      } else {
+        console.log("No remote backup found.");
       }
     } catch (e) {
       console.error("Pull from cloud failed", e);
+      showToast('Could not sync with Google Drive', 'error');
     } finally {
       setIsSyncing(false);
     }
-  }, [isGoogleConnected]);
+  }, [isGoogleConnected, showToast]);
 
-  // Initial Pull on startup if connected
+  // Initial Sync Logic (The "Handshake")
   useEffect(() => {
     const initSync = async () => {
-        if (isGoogleConnected && isInitialLoad.current) {
-            // Short delay to ensure Auth is ready
-            setTimeout(() => pullFromCloud(), 1000);
-            isInitialLoad.current = false;
+        // If we just reloaded from a restore, mark as ready and don't pull again
+        if (sessionStorage.getItem('lifeos_just_restored')) {
+            sessionStorage.removeItem('lifeos_just_restored');
+            setIsReadyToPush(true);
+            setLastSyncedAt(new Date());
+            return;
+        }
+
+        if (isGoogleConnected) {
+            try {
+               await pullFromCloud();
+            } catch(e) { console.error(e); }
+            finally { 
+                // Even if pull fails (offline/empty), we eventually allow pushing
+                // But typically only if we know we are the source of truth
+                setIsReadyToPush(true); 
+            }
+        } else {
+            setIsReadyToPush(true);
         }
     };
-    initSync();
-  }, [isGoogleConnected, pullFromCloud]);
+    
+    // Small delay to ensure Google Script is loaded
+    setTimeout(initSync, 1500);
+  }, [isGoogleConnected]); // Removed pullFromCloud dependency to avoid loops
 
   // Automated Push (Debounced)
   useEffect(() => {
-    if (isInitialLoad.current) return;
+    if (!isReadyToPush) return;
     if (!isGoogleConnected) return;
 
-    // Debounce to avoid hitting API on every keystroke
     if (syncTimeout.current) clearTimeout(syncTimeout.current);
     
+    // 2 second debounce
     syncTimeout.current = setTimeout(() => {
       syncNow();
-    }, 5000); // 5 second quiet period before sync
+    }, 2000);
 
     return () => {
       if (syncTimeout.current) clearTimeout(syncTimeout.current);
     };
-  }, [isGoogleConnected, getCurrentState, syncNow]);
+  }, [getCurrentState, isReadyToPush, isGoogleConnected]); // Intentionally exclude syncNow to prevent recursion
 
   return (
     <SyncContext.Provider value={{ isSyncing, lastSyncedAt, syncNow, pullFromCloud }}>

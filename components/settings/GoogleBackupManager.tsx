@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Cloud, LogOut, Check, Loader2, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { Cloud, LogOut, Check, Loader2, RefreshCw, CheckCircle2, ArrowDownCircle } from 'lucide-react';
 import { useSettings } from '../../context/SettingsContext';
 import { useSync } from '../../context/SyncContext';
 import { GoogleDriveService } from '../../services/GoogleDriveService';
@@ -10,7 +10,7 @@ import { useToast } from '../../context/ToastContext';
 
 export const GoogleBackupManager: React.FC = () => {
   const { settings, isGoogleConnected, setGoogleConnected } = useSettings();
-  const { isSyncing, lastSyncedAt } = useSync();
+  const { isSyncing, lastSyncedAt, syncNow, pullFromCloud } = useSync();
   const { showToast } = useToast();
   const t = useMemo(() => getTranslation((settings?.preferences?.language || 'en') as LanguageCode), [settings?.preferences?.language]);
 
@@ -22,9 +22,10 @@ export const GoogleBackupManager: React.FC = () => {
       await GoogleDriveService.signIn();
       setGoogleConnected(true);
       showToast('Successfully connected to Google Drive', 'success');
-      // Trigger a sync immediately after connection
-      window.location.reload(); 
+      // Force a pull immediately
+      setTimeout(() => window.location.reload(), 500);
     } catch (e) {
+      console.error(e);
       showToast('Failed to connect to Google Account', 'error');
     } finally {
       setIsLoading(false);
@@ -35,6 +36,17 @@ export const GoogleBackupManager: React.FC = () => {
     await GoogleDriveService.signOut();
     setGoogleConnected(false);
     showToast('Disconnected from Google Account', 'info');
+  };
+
+  const handleManualSync = async () => {
+    await syncNow();
+    showToast('Sync completed', 'success');
+  };
+
+  const handleForcePull = async () => {
+    if(confirm("This will overwrite local data with cloud data. Continue?")) {
+        await pullFromCloud();
+    }
   };
 
   if (!isGoogleConnected) {
@@ -81,14 +93,14 @@ export const GoogleBackupManager: React.FC = () => {
           </button>
        </div>
 
-       <div className="p-6">
+       <div className="p-6 space-y-4">
           <div className={`flex items-center gap-3 p-4 rounded-2xl transition-all ${isSyncing ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800' : 'bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700'}`}>
              <div className={`p-2 rounded-full ${isSyncing ? 'text-blue-600' : 'text-gray-400'}`}>
                 <RefreshCw size={20} className={isSyncing ? "animate-spin" : ""} />
              </div>
              <div className="flex-1">
                 <p className="text-sm font-bold text-gray-900 dark:text-white">
-                   {isSyncing ? 'Syncing with cloud...' : 'Up to date'}
+                   {isSyncing ? 'Syncing with cloud...' : 'Synced'}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                    {isSyncing 
@@ -103,9 +115,23 @@ export const GoogleBackupManager: React.FC = () => {
              )}
           </div>
           
-          <p className="text-[10px] text-gray-400 text-center mt-4">
-             LifeOS automatically backs up your data every time you make changes.
-          </p>
+          <div className="flex gap-2">
+             <button 
+                onClick={handleManualSync}
+                disabled={isSyncing}
+                className="flex-1 py-2 bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50"
+             >
+                Sync Now
+             </button>
+             <button 
+                onClick={handleForcePull}
+                disabled={isSyncing}
+                className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs font-bold rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 flex items-center gap-2"
+                title="Force Download"
+             >
+                <ArrowDownCircle size={14} /> Pull
+             </button>
+          </div>
        </div>
     </div>
   );
