@@ -1,16 +1,23 @@
 
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged, User } from "firebase/auth";
-import { getFirestore, doc, setDoc, onSnapshot, getDoc } from "firebase/firestore";
+import { getFirestore, doc, setDoc, onSnapshot } from "firebase/firestore";
 import { BackupData } from '../types';
 
-// --- CONFIGURATION ---
-// 🚨 IMPORTANT: Replace the values below with your specific Firebase Project configuration.
-// 1. Go to console.firebase.google.com
-// 2. Create a project
-// 3. Add a Web App
-// 4. Copy the `firebaseConfig` object here.
-const firebaseConfig = {
+const CONFIG_STORAGE_KEY = 'lifeos_firebase_config';
+
+// 1. Try to get config from LocalStorage
+const getStoredConfig = () => {
+  try {
+    const stored = localStorage.getItem(CONFIG_STORAGE_KEY);
+    return stored ? JSON.parse(stored) : null;
+  } catch (e) {
+    return null;
+  }
+};
+
+// 2. Default Placeholder (or load from Env if available)
+const defaultBufferConfig = {
   apiKey: "YOUR_API_KEY_HERE",
   authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
   projectId: "YOUR_PROJECT_ID",
@@ -19,8 +26,9 @@ const firebaseConfig = {
   appId: "YOUR_APP_ID"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// 3. Initialize with best available config
+const activeConfig = getStoredConfig() || defaultBufferConfig;
+const app = initializeApp(activeConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
@@ -29,6 +37,21 @@ export const FirebaseService = {
   auth,
   db,
   currentUser: null as User | null,
+
+  /**
+   * Check if the current configuration is valid (not placeholder)
+   */
+  isConfigured: (): boolean => {
+    return activeConfig.apiKey !== "YOUR_API_KEY_HERE";
+  },
+
+  /**
+   * Save new configuration and reload app
+   */
+  saveConfiguration: (config: any) => {
+    localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config));
+    window.location.reload(); // Reload to re-initialize Firebase with new keys
+  },
 
   /**
    * Initialize and listen for auth changes
@@ -44,8 +67,7 @@ export const FirebaseService = {
    * Sign in with Google Popup
    */
   signIn: async (): Promise<User> => {
-    // Safety check for placeholder config
-    if (firebaseConfig.apiKey === "YOUR_API_KEY_HERE") {
+    if (!FirebaseService.isConfigured()) {
         throw new Error("FIREBASE_CONFIG_MISSING");
     }
 
@@ -72,17 +94,12 @@ export const FirebaseService = {
 
   /**
    * Save Data to Firestore (Auto Backup)
-   * Path: users/{uid}
    */
   saveUserData: async (data: BackupData): Promise<void> => {
-    if (!auth.currentUser) return;
-    
-    // Safety check for placeholder config
-    if (firebaseConfig.apiKey === "YOUR_API_KEY_HERE") return;
+    if (!auth.currentUser || !FirebaseService.isConfigured()) return;
 
     try {
       const userRef = doc(db, "users", auth.currentUser.uid);
-      // We wrap it in a 'data' field to keep the document clean
       await setDoc(userRef, { 
         data, 
         updatedAt: Date.now(),
@@ -97,25 +114,14 @@ export const FirebaseService = {
 
   /**
    * Subscribe to Data Changes (Real-time Sync)
-   * This handles the "PC changes -> Phone updates" flow
    */
   subscribeToUserData: (onDataReceived: (data: BackupData) => void) => {
-    if (!auth.currentUser) return () => {};
-    
-    // Safety check
-    if (firebaseConfig.apiKey === "YOUR_API_KEY_HERE") return () => {};
+    if (!auth.currentUser || !FirebaseService.isConfigured()) return () => {};
 
     const userRef = doc(db, "users", auth.currentUser.uid);
     
     const unsubscribe = onSnapshot(userRef, (docSnap) => {
-      // metadata.hasPendingWrites is true if the event is from a local write.
-      // We usually want to ignore local writes to prevent loops, 
-      // but 'onSnapshot' is smart enough. 
-      // However, to be safe, if we are the ones writing, we don't need to "restore" it.
-      if (docSnap.metadata.hasPendingWrites) {
-        // Local change, ignore
-        return;
-      }
+      if (docSnap.metadata.hasPendingWrites) return;
 
       if (docSnap.exists()) {
         const remoteData = docSnap.data().data as BackupData;
@@ -130,4 +136,4 @@ export const FirebaseService = {
   }
 };
 
-export type { User }; // Export User type for consumption
+export type { User };
