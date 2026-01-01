@@ -1,16 +1,25 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { X, Sparkles, ChefHat, Loader2, AlertCircle } from 'lucide-react';
-import { Recipe } from '../../types';
+import { Recipe, LanguageCode } from '../../types';
 import { getApiKey } from '../../utils/env';
+import { useSettings } from '../../context/SettingsContext';
 
 interface AIChefModalProps {
   onRecipeGenerated: (recipe: Partial<Recipe>) => void;
   onClose: () => void;
 }
 
+const LANG_MAP: Record<string, string> = {
+  en: 'English',
+  ar: 'Arabic',
+  es: 'Spanish',
+  fr: 'French'
+};
+
 export const AIChefModal: React.FC<AIChefModalProps> = ({ onRecipeGenerated, onClose }) => {
+  const { settings } = useSettings();
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState('');
@@ -32,6 +41,8 @@ export const AIChefModal: React.FC<AIChefModalProps> = ({ onRecipeGenerated, onC
     try {
       const ai = new GoogleGenAI({ apiKey });
       
+      const appLang = LANG_MAP[settings.preferences.language] || 'English';
+
       const schema: Schema = {
         type: Type.OBJECT,
         properties: {
@@ -65,11 +76,17 @@ export const AIChefModal: React.FC<AIChefModalProps> = ({ onRecipeGenerated, onC
 
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `Create a simple, reliable, and delicious recipe based on this request: "${prompt}". Focus on classic flavors, standard ingredients, and ease of preparation.`,
+        contents: `Create a recipe based on this request: "${prompt}".`,
         config: {
           responseMimeType: "application/json",
           responseSchema: schema,
-          systemInstruction: "You are an expert home cook who values simplicity and flavor. Create recipes that are practical for everyday cooking using common grocery store ingredients. Avoid experimental, strange, or overly complex flavor combinations. Ensure the recipe is 'tried and true'. Ensure ingredient amounts are numeric.",
+          systemInstruction: `You are an expert home cook. 
+          1. Detect the language of the user's request ("${prompt}").
+          2. Generate the recipe content (Title, Description, Ingredients, Instructions) IN THAT SAME LANGUAGE.
+          3. If the request is language-neutral (e.g. just emojis or numbers), default to ${appLang}.
+          4. Ensure the JSON structure remains valid regardless of the language used for the values.
+          5. Values for 'difficulty' must remain in English ("easy", "medium", "hard").
+          6. Create recipes that are practical for everyday cooking.`,
         },
       });
 

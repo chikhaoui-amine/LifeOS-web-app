@@ -4,6 +4,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { X, Sparkles, BrainCircuit, Loader2, AlertCircle, ArrowRight, Lightbulb } from 'lucide-react';
 import { Goal, GoalType } from '../../types';
 import { getApiKey } from '../../utils/env';
+import { useSettings } from '../../context/SettingsContext';
 
 interface AIGoalPlannerModalProps {
   onGoalGenerated: (goal: Partial<Goal>) => void;
@@ -18,7 +19,15 @@ const CATEGORIES = [
 
 const COLORS = ['indigo', 'blue', 'green', 'amber', 'red', 'purple', 'pink'];
 
+const LANG_MAP: Record<string, string> = {
+  en: 'English',
+  ar: 'Arabic',
+  es: 'Spanish',
+  fr: 'French'
+};
+
 export const AIGoalPlannerModal: React.FC<AIGoalPlannerModalProps> = ({ onGoalGenerated, onClose }) => {
+  const { settings } = useSettings();
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState('');
@@ -38,10 +47,11 @@ export const AIGoalPlannerModal: React.FC<AIGoalPlannerModalProps> = ({ onGoalGe
 
     try {
       const ai = new GoogleGenAI({ apiKey });
+      const appLang = LANG_MAP[settings.preferences.language] || 'English';
       
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `I want to achieve this: "${prompt}". Please help me turn this into a SMART goal (Specific, Measurable, Achievable, Relevant, Time-bound).`,
+        contents: `I want to achieve this: "${prompt}". Please help me turn this into a SMART goal.`,
         config: {
           responseMimeType: "application/json",
           responseSchema: {
@@ -70,7 +80,12 @@ export const AIGoalPlannerModal: React.FC<AIGoalPlannerModalProps> = ({ onGoalGe
             },
             required: ["title", "description", "motivation", "category", "type", "milestones", "priority", "color"],
           },
-          systemInstruction: "You are a world-class life coach and productivity expert. Your job is to take rough ideas and turn them into highly effective, structured goals. You provide clear action steps (milestones) and emotional resonance (motivation). Always ensure the category fits the predefined list provided in the schema.",
+          systemInstruction: `You are a world-class life coach.
+          1. Detect the language of the user's prompt ("${prompt}").
+          2. Output the content fields (title, description, motivation, milestones) IN THAT SAME LANGUAGE.
+          3. If the prompt language is ambiguous or neutral, default to ${appLang}.
+          4. Ensure 'category', 'type', 'priority', and 'color' strictly follow the ENUM values in the schema (keep them in English as they are system keys).
+          5. Provide clear, actionable milestones.`,
         },
       });
 
