@@ -30,7 +30,7 @@ export const AIGoalPlannerModal: React.FC<AIGoalPlannerModalProps> = ({ onGoalGe
 
     const apiKey = process.env.API_KEY;
     if (!apiKey) {
-      setError("API Key missing. Please configure VITE_API_KEY in your Vercel settings.");
+      setError("System Error: VITE_API_KEY is missing in your Vercel settings.");
       setIsGenerating(false);
       return;
     }
@@ -90,7 +90,11 @@ export const AIGoalPlannerModal: React.FC<AIGoalPlannerModalProps> = ({ onGoalGe
 
     } catch (err: any) {
       console.error("AI Goal Planning Error:", err);
-      setError("The coach is busy right now. Please try again in a moment.");
+      let msg = "The coach is busy right now. Please try again.";
+      if (err.message.includes('403') || err.message.includes('API key')) {
+         msg = "API Key Invalid. Check VITE_API_KEY in Vercel.";
+      }
+      setError(msg);
     } finally {
       setIsGenerating(false);
     }
