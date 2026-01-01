@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Cloud, LogOut, Check, Loader2, RefreshCw, User as UserIcon } from 'lucide-react';
+import { Cloud, LogOut, Check, Loader2, RefreshCw, User as UserIcon, AlertTriangle } from 'lucide-react';
 import { useSettings } from '../../context/SettingsContext';
 import { useSync } from '../../context/SyncContext';
 import { FirebaseService } from '../../services/FirebaseService';
@@ -15,15 +15,19 @@ export const GoogleBackupManager: React.FC = () => {
   const t = useMemo(() => getTranslation((settings?.preferences?.language || 'en') as LanguageCode), [settings?.preferences?.language]);
 
   const [isLoading, setIsLoading] = useState(false);
+  const [configError, setConfigError] = useState(false);
 
   const handleConnect = async () => {
     setIsLoading(true);
+    setConfigError(false);
     try {
       await FirebaseService.signIn();
       showToast('Signed in successfully', 'success');
     } catch (e: any) {
       console.error(e);
-      if (e.code === 'auth/popup-closed-by-user') {
+      if (e.message === "FIREBASE_CONFIG_MISSING") {
+        setConfigError(true);
+      } else if (e.code === 'auth/popup-closed-by-user') {
         showToast('Sign in cancelled', 'info');
       } else {
         showToast('Sign in failed. Check console.', 'error');
@@ -50,6 +54,21 @@ export const GoogleBackupManager: React.FC = () => {
               Sign in with Google to automatically backup your data and sync across all your devices.
             </p>
          </div>
+         
+         {configError && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-left w-full max-w-xs">
+               <div className="flex items-start gap-3">
+                  <AlertTriangle className="text-red-500 shrink-0 mt-0.5" size={18} />
+                  <div>
+                     <p className="text-xs font-bold text-red-600 dark:text-red-400 mb-1">Configuration Missing</p>
+                     <p className="text-xs text-red-500 dark:text-red-300">
+                        Please open <code>services/FirebaseService.ts</code> and add your API Key from the Firebase Console.
+                     </p>
+                  </div>
+               </div>
+            </div>
+         )}
+
          <button 
            onClick={handleConnect}
            disabled={isLoading}
