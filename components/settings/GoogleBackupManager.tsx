@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Cloud, LogOut, Check, Loader2, RefreshCw, User as UserIcon } from 'lucide-react';
+import { Cloud, LogOut, Check, Loader2, RefreshCw, User as UserIcon, AlertTriangle } from 'lucide-react';
 import { useSettings } from '../../context/SettingsContext';
 import { useSync } from '../../context/SyncContext';
 import { FirebaseService } from '../../services/FirebaseService';
@@ -15,18 +15,27 @@ export const GoogleBackupManager: React.FC = () => {
   const t = useMemo(() => getTranslation((settings?.preferences?.language || 'en') as LanguageCode), [settings?.preferences?.language]);
 
   const [isLoading, setIsLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const handleConnect = async () => {
     setIsLoading(true);
+    setAuthError(null);
     try {
       await FirebaseService.signIn();
       showToast('Signed in successfully', 'success');
     } catch (e: any) {
-      console.error(e);
+      console.error("Firebase Auth Error:", e);
       if (e.code === 'auth/popup-closed-by-user') {
         showToast('Sign in cancelled', 'info');
+      } else if (e.code === 'auth/unauthorized-domain') {
+        const domain = window.location.hostname;
+        setAuthError(`Domain "${domain}" is not authorized. Add it to Firebase Console > Authentication > Settings > Authorized Domains.`);
+        showToast('Unauthorized Domain', 'error');
+      } else if (e.code === 'auth/cancelled-popup-request') {
+        // Ignore multiple clicks
       } else {
-        showToast('Sign in failed. Check console.', 'error');
+        showToast(`Sign in failed: ${e.message}`, 'error');
+        setAuthError(e.message);
       }
     } finally {
       setIsLoading(false);
@@ -36,6 +45,7 @@ export const GoogleBackupManager: React.FC = () => {
   const handleDisconnect = async () => {
     await FirebaseService.signOut();
     showToast('Signed out', 'info');
+    setAuthError(null);
   };
 
   return (
@@ -62,6 +72,13 @@ export const GoogleBackupManager: React.FC = () => {
                 Sign in with Google
              </button>
            </div>
+
+           {authError && (
+             <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs rounded-xl flex items-start gap-2 text-left max-w-xs break-words">
+                <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                <span>{authError}</span>
+             </div>
+           )}
         </div>
       ) : (
         <div className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden flex flex-col">
@@ -122,3 +139,4 @@ export const GoogleBackupManager: React.FC = () => {
     </>
   );
 };
+    
