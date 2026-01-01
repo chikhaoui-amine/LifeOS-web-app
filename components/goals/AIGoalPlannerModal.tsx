@@ -28,8 +28,15 @@ export const AIGoalPlannerModal: React.FC<AIGoalPlannerModalProps> = ({ onGoalGe
     setIsGenerating(true);
     setError('');
 
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+      setError("API Key missing. Please configure VITE_API_KEY in your Vercel settings.");
+      setIsGenerating(false);
+      return;
+    }
+
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey });
       
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',

@@ -87,7 +87,8 @@
       .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
     </style>
     <script>
-      window.process = { env: { API_KEY: "" } };
+      // Global shim for process.env needed by some libraries
+      window.process = window.process || { env: {} };
     </script>
   <script type="importmap">
 {
