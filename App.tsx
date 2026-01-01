@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { HabitProvider } from './context/HabitContext';
@@ -18,6 +18,7 @@ import { DigitalWellnessProvider } from './context/DigitalWellnessContext';
 import { SyncProvider } from './context/SyncContext';
 import { NotificationScheduler } from './components/NotificationScheduler';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { SplashScreen } from './components/SplashScreen';
 import Today from './pages/Today';
 import Habits from './pages/Habits';
 import Tasks from './pages/Tasks';
@@ -33,6 +34,15 @@ import Sleep from './pages/Sleep';
 import { ThemeCustomizer } from './pages/ThemeCustomizer';
 
 function App() {
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <ErrorBoundary>
       <ThemeProvider>
@@ -50,6 +60,8 @@ function App() {
                               <DigitalWellnessProvider>
                                 <SyncProvider>
                                   <NotificationScheduler />
+                                  
+                                  {isLoading && <SplashScreen />}
                                   
                                   <HashRouter>
                                     <Routes>

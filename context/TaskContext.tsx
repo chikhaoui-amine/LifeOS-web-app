@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Task, Subtask } from '../types';
 import { getTodayKey } from '../utils/dateUtils';
@@ -25,20 +24,16 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const loadData = async () => {
-    const data = await storage.load<Task[]>(TASKS_STORAGE_KEY);
-    if (data) {
-      setTasks(data);
-    }
-    setLoading(false);
-  };
-
-  // Load Tasks & Listen for Sync
+  // Load Tasks
   useEffect(() => {
+    const loadData = async () => {
+      const data = await storage.load<Task[]>(TASKS_STORAGE_KEY);
+      if (data) {
+        setTasks(data);
+      }
+      setLoading(false);
+    };
     loadData();
-    const handleSync = () => loadData();
-    window.addEventListener('lifeos-sync-complete', handleSync);
-    return () => window.removeEventListener('lifeos-sync-complete', handleSync);
   }, []);
 
   // Sync to Storage

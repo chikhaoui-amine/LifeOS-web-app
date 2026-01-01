@@ -1,20 +1,38 @@
 
 import React, { useState, useMemo } from 'react';
-import { Cloud, LogOut, Check, Loader2, RefreshCw, CheckCircle2, ArrowDownCircle } from 'lucide-react';
+import { Cloud, UploadCloud, DownloadCloud, LogOut, Check, Loader2, Calendar, FileJson, AlertCircle } from 'lucide-react';
 import { useSettings } from '../../context/SettingsContext';
-import { useSync } from '../../context/SyncContext';
-import { GoogleDriveService } from '../../services/GoogleDriveService';
+import { useHabits } from '../../context/HabitContext';
+import { useTasks } from '../../context/TaskContext';
+import { useJournal } from '../../context/JournalContext';
+import { useGoals } from '../../context/GoalContext';
+import { useFinance } from '../../context/FinanceContext';
+import { useMeals } from '../../context/MealContext';
+import { useSleep } from '../../context/SleepContext';
+import { GoogleDriveService, GoogleDriveFile } from '../../services/GoogleDriveService';
+import { BackupService } from '../../services/BackupService';
 import { getTranslation } from '../../utils/translations';
 import { LanguageCode } from '../../types';
 import { useToast } from '../../context/ToastContext';
+import { RestoreModal } from './RestoreModal';
 
 export const GoogleBackupManager: React.FC = () => {
   const { settings, isGoogleConnected, setGoogleConnected } = useSettings();
-  const { isSyncing, lastSyncedAt, syncNow, pullFromCloud } = useSync();
+  const { habits } = useHabits();
+  const { tasks } = useTasks();
+  const { entries: journal } = useJournal();
+  const { goals } = useGoals();
+  const { accounts, transactions, budgets, savingsGoals } = useFinance();
+  const { recipes, mealPlans, shoppingList } = useMeals();
+  const { logs: sleepLogs } = useSleep();
   const { showToast } = useToast();
   const t = useMemo(() => getTranslation((settings?.preferences?.language || 'en') as LanguageCode), [settings?.preferences?.language]);
 
   const [isLoading, setIsLoading] = useState(false);
+  const [cloudFiles, setCloudFiles] = useState<GoogleDriveFile[]>([]);
+  const [isListing, setIsListing] = useState(false);
+  const [restoreData, setRestoreData] = useState<any>(null);
+  const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
 
   const handleConnect = async () => {
     setIsLoading(true);
@@ -22,9 +40,7 @@ export const GoogleBackupManager: React.FC = () => {
       await GoogleDriveService.signIn();
       setGoogleConnected(true);
       showToast('Successfully connected to Google Drive', 'success');
-      // No forced reload here. The SyncContext effect will detect the change in `isGoogleConnected` and trigger the pull.
     } catch (e) {
-      console.error(e);
       showToast('Failed to connect to Google Account', 'error');
     } finally {
       setIsLoading(false);
@@ -34,18 +50,71 @@ export const GoogleBackupManager: React.FC = () => {
   const handleDisconnect = async () => {
     await GoogleDriveService.signOut();
     setGoogleConnected(false);
+    setCloudFiles([]);
     showToast('Disconnected from Google Account', 'info');
   };
 
-  const handleManualSync = async () => {
-    await syncNow();
-    showToast('Sync completed', 'success');
+  const handleBackup = async () => {
+    setIsLoading(true);
+    try {
+      const fullBackup = BackupService.createBackupData(habits, tasks, settings);
+      fullBackup.journal = journal;
+      fullBackup.goals = goals;
+      fullBackup.finance = { accounts, transactions, budgets, savingsGoals };
+      fullBackup.sleepLogs = sleepLogs;
+      fullBackup.meals = { recipes, mealPlans, shoppingList };
+
+      await GoogleDriveService.uploadBackup(fullBackup);
+      showToast('Backup successful!', 'success');
+      if (cloudFiles.length > 0) handleListFiles(); 
+    } catch (e) {
+      showToast('Backup failed', 'error');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleForcePull = async () => {
-    if(confirm("This will overwrite local data with cloud data. Continue?")) {
-        await pullFromCloud();
+  const handleListFiles = async () => {
+    setIsListing(true);
+    try {
+      const files = await GoogleDriveService.listFiles();
+      setCloudFiles(files);
+    } catch (e) {
+      showToast('Failed to fetch cloud backups', 'error');
+    } finally {
+      setIsListing(false);
     }
+  };
+
+  const handleDownloadAndPrepareRestore = async (fileId: string) => {
+     setIsLoading(true);
+     try {
+        const data = await GoogleDriveService.downloadFile(fileId);
+        setRestoreData(data);
+        setIsRestoreModalOpen(true);
+     } catch (e) {
+        showToast('Download failed', 'error');
+     } finally {
+        setIsLoading(false);
+     }
+  };
+
+  const executeRestore = async (method: 'merge' | 'replace') => {
+     if (!restoreData) return;
+     
+     try {
+        if (method === 'replace') {
+           await BackupService.performReplace(restoreData);
+           showToast('Full restore complete. Reloading...', 'success');
+           setTimeout(() => window.location.reload(), 1500);
+        } else {
+           const result = await BackupService.performMerge(restoreData, habits, tasks);
+           showToast(`Merged ${result.habitsAdded} habits and ${result.tasksAdded} tasks.`, 'success');
+           setIsRestoreModalOpen(false);
+        }
+     } catch (e) {
+        showToast('Restore failed', 'error');
+     }
   };
 
   if (!isGoogleConnected) {
@@ -57,7 +126,7 @@ export const GoogleBackupManager: React.FC = () => {
          <div>
             <h3 className="text-lg font-bold text-gray-900 dark:text-white">{t.settings.googleAccount}</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 max-w-xs">
-              Securely back up your LifeOS data to your personal Google Drive and sync across devices automatically.
+              Securely back up your LifeOS data to your personal Google Drive and sync across devices.
             </p>
          </div>
          <button 
@@ -76,12 +145,12 @@ export const GoogleBackupManager: React.FC = () => {
     <div className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden flex flex-col">
        <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-center gap-4 bg-gray-50/50 dark:bg-gray-800/50">
           <div className="flex items-center gap-4">
-             <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-2xl flex items-center justify-center shrink-0">
+             <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-2xl flex items-center justify-center">
                 <Check size={24} strokeWidth={3} />
              </div>
              <div>
                 <h3 className="font-bold text-gray-900 dark:text-white">{t.settings.googleSync}</h3>
-                <p className="text-xs text-gray-500">Auto-backup enabled</p>
+                <p className="text-xs text-gray-500">Google Account Connected</p>
              </div>
           </div>
           <button 
@@ -92,46 +161,64 @@ export const GoogleBackupManager: React.FC = () => {
           </button>
        </div>
 
-       <div className="p-6 space-y-4">
-          <div className={`flex items-center gap-3 p-4 rounded-2xl transition-all ${isSyncing ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800' : 'bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700'}`}>
-             <div className={`p-2 rounded-full ${isSyncing ? 'text-blue-600' : 'text-gray-400'}`}>
-                <RefreshCw size={20} className={isSyncing ? "animate-spin" : ""} />
-             </div>
-             <div className="flex-1">
-                <p className="text-sm font-bold text-gray-900 dark:text-white">
-                   {isSyncing ? 'Syncing with cloud...' : 'Synced'}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                   {isSyncing 
-                      ? 'Backing up your latest changes...' 
-                      : lastSyncedAt 
-                         ? `Last synced: ${lastSyncedAt.toLocaleTimeString()} ${lastSyncedAt.toLocaleDateString()}` 
-                         : 'Waiting for next sync...'}
-                </p>
-             </div>
-             {!isSyncing && (
-                <CheckCircle2 size={20} className="text-green-500" />
-             )}
-          </div>
-          
-          <div className="flex gap-2">
-             <button 
-                onClick={handleManualSync}
-                disabled={isSyncing}
-                className="flex-1 py-2 bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50"
-             >
-                Sync Now
-             </button>
-             <button 
-                onClick={handleForcePull}
-                disabled={isSyncing}
-                className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs font-bold rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 flex items-center gap-2"
-                title="Force Download"
-             >
-                <ArrowDownCircle size={14} /> Pull
-             </button>
-          </div>
+       <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <button 
+            onClick={handleBackup}
+            disabled={isLoading}
+            className="p-4 bg-primary-600 hover:bg-primary-700 text-white rounded-2xl font-bold flex items-center justify-center gap-3 shadow-lg shadow-primary-600/20 transition-all active:scale-95 disabled:opacity-50"
+          >
+             {isLoading ? <Loader2 size={20} className="animate-spin" /> : <UploadCloud size={20} />}
+             {t.settings.backupToDrive}
+          </button>
+
+          <button 
+            onClick={handleListFiles}
+            disabled={isLoading || isListing}
+            className="p-4 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-50"
+          >
+             {isListing ? <Loader2 size={20} className="animate-spin" /> : <DownloadCloud size={20} />}
+             {t.settings.restoreFromDrive}
+          </button>
        </div>
+
+       {cloudFiles.length > 0 && (
+         <div className="px-6 pb-6 animate-in slide-in-from-top-2 duration-300">
+            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3">Cloud Backups</h4>
+            <div className="space-y-2 max-h-[240px] overflow-y-auto pr-2 custom-scrollbar">
+               {cloudFiles.map(file => (
+                  <div 
+                    key={file.id} 
+                    className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/40 rounded-2xl border border-gray-100 dark:border-gray-700 hover:border-primary-500 transition-all group"
+                  >
+                     <div className="flex items-center gap-3">
+                        <div className="p-2 bg-white dark:bg-gray-800 rounded-xl text-gray-400">
+                           <FileJson size={18} />
+                        </div>
+                        <div>
+                           <p className="text-sm font-bold text-gray-900 dark:text-white truncate max-w-[150px]">{file.name}</p>
+                           <p className="text-[10px] text-gray-500 flex items-center gap-1">
+                              <Calendar size={10} /> {new Date(file.createdTime).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short'})}
+                           </p>
+                        </div>
+                     </div>
+                     <button 
+                       onClick={() => handleDownloadAndPrepareRestore(file.id)}
+                       className="p-2 bg-white dark:bg-gray-800 rounded-xl text-primary-600 opacity-0 group-hover:opacity-100 shadow-sm transition-all hover:scale-105"
+                     >
+                        <DownloadCloud size={18} />
+                     </button>
+                  </div>
+               ))}
+            </div>
+         </div>
+       )}
+
+       <RestoreModal 
+         isOpen={isRestoreModalOpen}
+         onClose={() => setIsRestoreModalOpen(false)}
+         backupData={restoreData}
+         onRestore={executeRestore}
+       />
     </div>
   );
 };

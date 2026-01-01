@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Goal, GoalMilestone, GoalNote } from '../types';
 import { storage } from '../utils/storage';
@@ -24,21 +23,18 @@ export const GoalProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const loadData = async () => {
-    const data = await storage.load<Goal[]>(GOALS_STORAGE_KEY);
-    if (data) {
-      const processed = data.map(g => ({ ...g, notes: g.notes || [] }));
-      setGoals(processed);
-    }
-    setLoading(false);
-  };
-
-  // Load Goals & Listen for Sync
+  // Load Goals
   useEffect(() => {
+    const loadData = async () => {
+      const data = await storage.load<Goal[]>(GOALS_STORAGE_KEY);
+      if (data) {
+        // Migration support for notes if needed
+        const processed = data.map(g => ({ ...g, notes: g.notes || [] }));
+        setGoals(processed);
+      }
+      setLoading(false);
+    };
     loadData();
-    const handleSync = () => loadData();
-    window.addEventListener('lifeos-sync-complete', handleSync);
-    return () => window.removeEventListener('lifeos-sync-complete', handleSync);
   }, []);
 
   // Sync to Storage

@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Account, Transaction, Budget, SavingsGoal, TransactionType } from '../types';
 import { storage } from '../utils/storage';
@@ -74,21 +73,26 @@ interface FinanceContextType {
   loading: boolean;
   currency: string;
   
+  // Accounts
   addAccount: (account: Omit<Account, 'id'>) => Promise<void>;
   updateAccount: (id: string, updates: Partial<Account>) => Promise<void>;
   deleteAccount: (id: string) => Promise<void>;
   
+  // Transactions
   addTransaction: (tx: Omit<Transaction, 'id' | 'createdAt'>) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
   
+  // Budgets
   addBudget: (budget: Omit<Budget, 'id'>) => Promise<void>;
   updateBudget: (id: string, updates: Partial<Budget>) => Promise<void>;
   deleteBudget: (id: string) => Promise<void>;
   
+  // Savings
   addSavingsGoal: (goal: Omit<SavingsGoal, 'id'>) => Promise<void>;
   updateSavingsGoal: (id: string, updates: Partial<SavingsGoal>) => Promise<void>;
   deleteSavingsGoal: (id: string) => Promise<void>;
   
+  // Helpers
   getFormattedCurrency: (amount: number) => string;
   getTotalBalance: () => number;
   setCurrency: (code: string) => void;
@@ -116,29 +120,26 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [currency, setCurrencyState] = useState('USD');
   const [loading, setLoading] = useState(true);
 
-  const loadData = async () => {
-    const storedAccounts = await storage.load<Account[]>(FINANCE_STORAGE_KEYS.ACCOUNTS);
-    const storedTransactions = await storage.load<Transaction[]>(FINANCE_STORAGE_KEYS.TRANSACTIONS);
-    const storedBudgets = await storage.load<Budget[]>(FINANCE_STORAGE_KEYS.BUDGETS);
-    const storedGoals = await storage.load<SavingsGoal[]>(FINANCE_STORAGE_KEYS.GOALS);
-    const storedCurrency = await storage.load<string>(FINANCE_STORAGE_KEYS.CURRENCY);
-
-    setAccounts(storedAccounts || DEFAULT_ACCOUNTS);
-    setTransactions(storedTransactions || []);
-    setBudgets(storedBudgets || []);
-    setSavingsGoals(storedGoals || []);
-    if (storedCurrency) setCurrencyState(storedCurrency);
-    setLoading(false);
-  };
-
-  // Load Data & Listen for Sync
+  // Load Data
   useEffect(() => {
-    loadData();
-    const handleSync = () => loadData();
-    window.addEventListener('lifeos-sync-complete', handleSync);
-    return () => window.removeEventListener('lifeos-sync-complete', handleSync);
+    const load = async () => {
+      const storedAccounts = await storage.load<Account[]>(FINANCE_STORAGE_KEYS.ACCOUNTS);
+      const storedTransactions = await storage.load<Transaction[]>(FINANCE_STORAGE_KEYS.TRANSACTIONS);
+      const storedBudgets = await storage.load<Budget[]>(FINANCE_STORAGE_KEYS.BUDGETS);
+      const storedGoals = await storage.load<SavingsGoal[]>(FINANCE_STORAGE_KEYS.GOALS);
+      const storedCurrency = await storage.load<string>(FINANCE_STORAGE_KEYS.CURRENCY);
+
+      setAccounts(storedAccounts || DEFAULT_ACCOUNTS);
+      setTransactions(storedTransactions || []);
+      setBudgets(storedBudgets || []);
+      setSavingsGoals(storedGoals || []);
+      if (storedCurrency) setCurrencyState(storedCurrency);
+      setLoading(false);
+    };
+    load();
   }, []);
 
+  // Sync logic handled by individual actions to ensure atomic updates with storage
   const saveData = async (key: string, data: any) => {
     await storage.save(key, data);
   };
@@ -148,6 +149,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     await saveData(FINANCE_STORAGE_KEYS.CURRENCY, code);
   };
 
+  // --- Account Actions ---
   const addAccount = async (data: Omit<Account, 'id'>) => {
     const newAccount = { ...data, id: Date.now().toString() };
     const updated = [...accounts, newAccount];
@@ -167,14 +169,18 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     await saveData(FINANCE_STORAGE_KEYS.ACCOUNTS, updated);
   };
 
+  // --- Transaction Actions ---
   const addTransaction = async (data: Omit<Transaction, 'id' | 'createdAt'>) => {
     const newTx = { ...data, id: Date.now().toString(), createdAt: new Date().toISOString() };
     
+    // Update State
     const updatedTransactions = [newTx, ...transactions];
     setTransactions(updatedTransactions);
     await saveData(FINANCE_STORAGE_KEYS.TRANSACTIONS, updatedTransactions);
 
+    // Update Account Balances
     let updatedAccounts = [...accounts];
+    
     if (data.type === 'income') {
       updatedAccounts = updatedAccounts.map(a => 
         a.id === data.accountId ? { ...a, balance: a.balance + data.amount } : a
@@ -183,10 +189,10 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       updatedAccounts = updatedAccounts.map(a => 
         a.id === data.accountId ? { ...a, balance: a.balance - data.amount } : a
       );
-    } else if (data.type === 'savings' && data.toAccountId) {
+    } else if (data.type === 'savings' && data.toAccountId) { // 'savings' acts like transfer
       updatedAccounts = updatedAccounts.map(a => {
-        if (a.id === data.accountId) return { ...a, balance: a.balance - data.amount };
-        if (a.id === data.toAccountId) return { ...a, balance: a.balance + data.amount };
+        if (a.id === data.accountId) return { ...a, balance: a.balance - data.amount }; // From
+        if (a.id === data.toAccountId) return { ...a, balance: a.balance + data.amount }; // To
         return a;
       });
     }
@@ -199,6 +205,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     const tx = transactions.find(t => t.id === id);
     if (!tx) return;
 
+    // Revert Balance
     let updatedAccounts = [...accounts];
     if (tx.type === 'income') {
       updatedAccounts = updatedAccounts.map(a => a.id === tx.accountId ? { ...a, balance: a.balance - tx.amount } : a);
@@ -220,6 +227,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     await saveData(FINANCE_STORAGE_KEYS.TRANSACTIONS, updatedTransactions);
   };
 
+  // --- Budget Actions ---
   const addBudget = async (data: Omit<Budget, 'id'>) => {
     const newBudget = { ...data, id: Date.now().toString() };
     const updated = [...budgets, newBudget];
@@ -239,6 +247,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     await saveData(FINANCE_STORAGE_KEYS.BUDGETS, updated);
   };
 
+  // --- Savings Actions ---
   const addSavingsGoal = async (data: Omit<SavingsGoal, 'id'>) => {
     const newGoal = { ...data, id: Date.now().toString() };
     const updated = [...savingsGoals, newGoal];
@@ -258,6 +267,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     await saveData(FINANCE_STORAGE_KEYS.GOALS, updated);
   };
 
+  // --- Helpers ---
   const getFormattedCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
