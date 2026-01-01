@@ -170,11 +170,27 @@ const Settings: React.FC = () => {
     setErrorMessage('');
     
     try {
-      const apiKey = process.env.API_KEY;
+      let apiKey = process.env.API_KEY;
+      
+      // FALLBACK: If process.env is empty, try direct access as a backup check
+      // This helps diagnose if the issue is 'key missing' vs 'injection failed'
+      if (!apiKey) {
+         try {
+            // @ts-ignore
+            apiKey = import.meta.env.VITE_API_KEY;
+            if (apiKey) {
+               console.log("LifeOS Debug: Found key in import.meta.env, but process.env injection failed.");
+               // Fix it temporarily for this session
+               (window as any).process.env.API_KEY = apiKey;
+            }
+         } catch(e) {}
+      }
       
       if (!apiKey) {
-        throw new Error("Missing API Key. In Vercel, ensure your variable is named 'VITE_API_KEY' not just 'API_KEY'.");
+        throw new Error("Missing API Key. Please verify VITE_API_KEY is set in Vercel and **Redeploy** to apply changes.");
       }
+
+      console.log("Testing AI with key ending in: ..." + apiKey.slice(-4));
 
       const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
@@ -193,7 +209,7 @@ const Settings: React.FC = () => {
       setApiStatus('error');
       
       let msg = e.message;
-      if (e.message.includes('403')) msg = "Permission Denied (403). Check API Key.";
+      if (e.message.includes('403')) msg = "Permission Denied (403). API Key may be invalid.";
       if (e.message.includes('400')) msg = "Bad Request (400). Check Model Name.";
       
       setErrorMessage(msg);
@@ -376,10 +392,10 @@ const Settings: React.FC = () => {
                           <p className="font-bold flex items-center gap-2 mb-2"><AlertTriangle size={14} /> Troubleshooting Guide</p>
                           <ul className="list-disc pl-4 space-y-1 opacity-90">
                              <li>
-                               <strong>If on Vercel:</strong> Go to Settings &gt; Environment Variables. Add Key: <code>VITE_API_KEY</code> (Prefix is mandatory!)
+                               <strong>If on Vercel:</strong> Go to Settings &gt; Environment Variables. Add Key: <code>VITE_API_KEY</code>.
                              </li>
                              <li>
-                               <strong>If Local:</strong> Create <code>.env</code> file with <code>VITE_API_KEY=AIza...</code>
+                               <strong>IMPORTANT:</strong> You must <strong>Redeploy</strong> (rebuild) your app for the new key to take effect. Saving the variable is not enough!
                              </li>
                              <li>
                                <strong>Error Detail:</strong> {errorMessage}
