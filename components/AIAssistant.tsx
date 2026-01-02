@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
-import { X, Bot, Maximize2, Minimize2, Zap, ChevronRight, ShieldAlert, History, Heart, Sparkles, MessageCircle, Lightbulb } from 'lucide-react';
+import { X, Bot, Maximize2, Minimize2, Zap, ChevronRight, ShieldAlert, History, Heart, Sparkles, MessageCircle, Lightbulb, Loader2 } from 'lucide-react';
 import { getApiKey } from '../utils/env';
 import { useTasks } from '../context/TaskContext';
 import { useHabits } from '../context/HabitContext';
@@ -71,18 +71,18 @@ export const AIAssistant: React.FC = () => {
   const [memory, setMemory] = useState<StrategistMemory>(INITIAL_MEMORY);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Data Contexts
   const { tasks, addTask } = useTasks();
   const { habits } = useHabits();
   const { goals } = useGoals();
-  const { journal } = useJournal();
+  const { entries: journal } = useJournal();
   const { transactions } = useFinance();
+  const { settings } = useSettings();
   const { logs: sleepLogs } = useSleep();
-  const { timeBlocks, deleteBlock: deleteTimeBlock, addBlock: addTimeBlock } = useTimeBlocks();
+  const { addBlock: addTimeBlock } = useTimeBlocks();
   const { prayers: deenPrayers } = useIslamic();
   const { enableStrictMode, settings: dwSettings } = useDigitalWellness();
-  const { reports, addReport } = useReports();
-  // Fix: Get settings from context to resolve missing reference
-  const { settings } = useSettings();
+  const { addReport } = useReports();
 
   useEffect(() => {
     const loadMemory = async () => {
@@ -166,7 +166,7 @@ export const AIAssistant: React.FC = () => {
 
     const apiKey = getApiKey();
     if (!apiKey) {
-      setMessages(prev => [...prev, { role: 'model', text: "API Key missing. Check Settings.", isError: true }]);
+      setMessages(prev => [...prev, { role: 'model', text: "API Key missing. Please set VITE_API_KEY in your environment.", isError: true }]);
       setIsThinking(false);
       return;
     }
@@ -182,7 +182,7 @@ export const AIAssistant: React.FC = () => {
         CONTEXT: ${contextData}
       `;
 
-      const result = await ai.models.generateContent({
+      const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: [
           ...messages.slice(-6).map(m => ({ role: m.role === 'model' ? 'model' : 'user', parts: [{ text: m.text }] })),
@@ -191,7 +191,6 @@ export const AIAssistant: React.FC = () => {
         config: { tools: [{ functionDeclarations: tools }], systemInstruction: systemPrompt }
       });
 
-      const response = result;
       let actionFeedback = "";
 
       if (response.functionCalls) {
@@ -223,16 +222,19 @@ export const AIAssistant: React.FC = () => {
                 actionFeedback += `📝 Added: ${args.title}\n`;
                 break;
             }
-          } catch (e) {}
+          } catch (e) {
+            console.error("Action tool error:", e);
+          }
         }
       }
 
       if (actionFeedback) setMessages(prev => [...prev, { role: 'model', text: actionFeedback, type: 'action' }]);
       if (response.text?.trim()) setMessages(prev => [...prev, { role: 'model', text: response.text! }]);
-      else if (!actionFeedback) setMessages(prev => [...prev, { role: 'model', text: "I'm here." }]);
+      else if (!actionFeedback) setMessages(prev => [...prev, { role: 'model', text: "I'm processing that. Is there anything else?" }]);
 
     } catch (e: any) {
-      setMessages(prev => [...prev, { role: 'model', text: "Technical hiccup. One sec.", isError: true }]);
+      console.error("AI Error:", e);
+      setMessages(prev => [...prev, { role: 'model', text: "I had a moment. Could you try saying that again?", isError: true }]);
     } finally {
       setIsThinking(false);
     }
@@ -248,7 +250,6 @@ export const AIAssistant: React.FC = () => {
   return (
     <div className="fixed bottom-0 left-0 right-0 z-[100] pointer-events-none p-4 md:p-6 flex flex-col items-center">
       
-      {/* TRIGGER / COLLAPSED BAR */}
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
@@ -258,7 +259,6 @@ export const AIAssistant: React.FC = () => {
             <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shadow-lg">
               <MessageCircle size={16} strokeWidth={2.5} />
             </div>
-            {/* Fix: use settings instead of undefined globalSettings */}
             <span className="text-xs font-bold text-gray-500">How's your day, {settings?.preferences?.language === 'ar' ? 'صديقي' : 'friend'}?</span>
           </div>
           <div className="flex items-center gap-2">
@@ -268,12 +268,10 @@ export const AIAssistant: React.FC = () => {
         </button>
       )}
 
-      {/* EXPANDED RECTANGULAR PANEL */}
       {isOpen && (
         <div 
           className="pointer-events-auto w-full max-w-2xl bg-white dark:bg-[#09090b] rounded-[2rem] border border-gray-200 dark:border-gray-800 shadow-[0_30px_100px_rgba(0,0,0,0.25)] flex flex-col overflow-hidden animate-in slide-in-from-bottom-6 fade-in duration-500 h-[450px]"
         >
-          {/* Compact Header */}
           <div className="px-6 py-4 flex justify-between items-center bg-gray-50/50 dark:bg-white/[0.02] border-b border-gray-100 dark:border-white/10 shrink-0">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white">
@@ -292,7 +290,6 @@ export const AIAssistant: React.FC = () => {
             </button>
           </div>
 
-          {/* Chat Body - Smaller and denser */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-[image:radial-gradient(rgba(0,0,0,0.01)_1px,transparent_1px)] bg-[size:20px_20px]">
             {messages.map((msg, i) => (
               <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} animate-in fade-in duration-300`}>
@@ -324,10 +321,7 @@ export const AIAssistant: React.FC = () => {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Bottom Area - Integrated Input */}
           <div className="p-4 bg-gray-50/50 dark:bg-white/[0.02] border-t border-gray-100 dark:border-white/10 shrink-0">
-             
-             {/* Suggested Pills - Minimalist */}
              <div className="flex gap-1.5 overflow-x-auto no-scrollbar mb-3">
                 {SUGGESTED_PROMPTS.map((prompt, i) => (
                    <button
