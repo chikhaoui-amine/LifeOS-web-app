@@ -57,17 +57,43 @@ export interface Task {
 
 // --- VISION BOARD SYSTEM ---
 
-export type VisionItemType = 'image' | 'quote' | 'goal_ref';
+export type VisionItemType = 'image' | 'quote' | 'goal_ref' | 'affirmation' | 'sticker' | 'shape';
 
 export interface VisionItem {
   id: string;
   type: VisionItemType;
-  content: string; // Image URL or Text
+  content: string; // Image URL, Text, or Icon Name
   caption?: string; // For images
-  subContent?: string; // Author for quotes
-  width: '1' | '2'; // Column span (relative)
-  height: '1' | '2' | '3'; // Height span
-  color?: string; // For quotes
+  subContent?: string; // Author for quotes or progress for goals
+  
+  // Legacy Grid Props
+  width: '1' | '2'; 
+  height: '1' | '2' | '3'; 
+  
+  // New Free-Form Props
+  x?: number;
+  y?: number;
+  widthPx?: number;
+  heightPx?: number;
+  rotation?: number;
+  zIndex?: number;
+  opacity?: number;
+  scale?: number;
+
+  color?: string; // Main color identifier (e.g., 'indigo', '#fff')
+  
+  // Rich Styling Props
+  backgroundColor?: string;
+  textColor?: string;
+  fontSize?: number;
+  fontWeight?: string;
+  fontFamily?: string;
+  borderRadius?: number;
+  borderColor?: string;
+  borderWidth?: number;
+  textAlign?: 'left' | 'center' | 'right';
+  shadow?: 'none' | 'sm' | 'md' | 'lg' | 'xl';
+  
   linkedGoalId?: string;
   createdAt: string;
 }
@@ -94,6 +120,11 @@ export const TIME_BLOCK_CATEGORIES = [
   { name: 'Health', color: '#ef4444', icon: '💪' },    // Red
   { name: 'Learning', color: '#ec4899', icon: '📚' },  // Pink
   { name: 'Break', color: '#6b7280', icon: '☕' },     // Gray
+  { name: 'Creative', color: '#8b5cf6', icon: '🎨' },  // Violet
+  { name: 'Finance', color: '#22c55e', icon: '💰' },   // Green
+  { name: 'Family', color: '#f43f5e', icon: '❤️' },    // Rose
+  { name: 'Social', color: '#0ea5e9', icon: '🗣️' },    // Sky
+  { name: 'Admin', color: '#64748b', icon: '📂' },     // Slate
   { name: 'Other', color: '#3b82f6', icon: '🔹' },     // Blue
 ];
 
@@ -405,6 +436,30 @@ export interface IslamicSettings {
   };
 }
 
+// --- WEEKLY REPORTS SYSTEM ---
+
+export interface WeeklyReportContent {
+  type: 'WEEKLY_REPORT';
+  weekRange: string; // YYYY-MM-DD → YYYY-MM-DD
+  title: string;
+  overallTone: 'positive' | 'neutral' | 'corrective' | 'recovery';
+  summary: string;
+  wins: string[];
+  challenges: string[];
+  patterns: string[];
+  fixes: string[];
+  nextWeekFocus: string[];
+  coachNote: string;
+  confidence: number;
+}
+
+export interface WeeklyReport {
+  id: string;
+  weekRange: string;
+  createdAt: string;
+  content: WeeklyReportContent;
+}
+
 export interface AppSettings {
   notifications: {
     enabled: boolean;
@@ -421,7 +476,9 @@ export interface AppSettings {
     timeFormat: '12h' | '24h';
     autoBackup: boolean;
     enableIslamicFeatures: boolean;
+    reportDay: number; // 0-6 (Sun-Sat)
   };
+  disabledModules: string[];
   islamic?: IslamicSettings;
   sleep?: SleepSettings;
   scratchpad?: string;
@@ -465,6 +522,7 @@ export interface BackupData {
     stats?: any; // Added
   };
   timeBlocks?: TimeBlock[];
+  reports?: WeeklyReport[]; // Added
   settings: AppSettings;
   customThemes?: Theme[]; // Added
 }

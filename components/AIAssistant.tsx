@@ -1,7 +1,7 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
-import { Sparkles, X, Bot, Maximize2, Minimize2, Terminal, Cpu, Zap, ChevronRight, Activity } from 'lucide-react';
+import { X, Bot, Maximize2, Minimize2, Zap, ChevronRight, ShieldAlert, History, Heart, Sparkles, MessageCircle, Lightbulb } from 'lucide-react';
 import { getApiKey } from '../utils/env';
 import { useTasks } from '../context/TaskContext';
 import { useHabits } from '../context/HabitContext';
@@ -14,296 +14,172 @@ import { useSleep } from '../context/SleepContext';
 import { useTimeBlocks } from '../context/TimeBlockContext';
 import { useDigitalWellness } from '../context/DigitalWellnessContext';
 import { useIslamic } from '../context/IslamicContext';
-import { getTodayKey } from '../utils/dateUtils';
+import { useReports } from '../context/ReportContext';
+import { getTodayKey, formatDateKey } from '../utils/dateUtils';
+import { storage } from '../utils/storage';
+import { WeeklyReport, WeeklyReportContent } from '../types';
 
 interface Message {
   role: 'user' | 'model' | 'system';
   text: string;
   isError?: boolean;
-  type?: 'text' | 'action'; // To style tool outputs differently
+  type?: 'text' | 'action' | 'memory'; 
 }
+
+interface StrategistMemory {
+  bestWorkingHours: string[];
+  commonExcuses: string[];
+  failurePoints: string[];
+  disciplineThreshold: string;
+  stressSignals: string[];
+  recoverySpeed: string;
+  significantWins: string[];
+  lastAnalysisLesson: string;
+  feedbackPreference: string;
+  motivationalDrivers: string[];
+}
+
+const MEMORY_STORAGE_KEY = 'lifeos_strategist_memory_v1';
+
+const INITIAL_MEMORY: StrategistMemory = {
+  bestWorkingHours: [],
+  commonExcuses: [],
+  failurePoints: [],
+  disciplineThreshold: 'Unknown',
+  stressSignals: [],
+  recoverySpeed: 'Normal',
+  significantWins: [],
+  lastAnalysisLesson: 'Initial session pending.',
+  feedbackPreference: 'Gentle but honest',
+  motivationalDrivers: []
+};
+
+const SUGGESTED_PROMPTS = [
+  { label: "Focus Session", text: "I'm distracted. Start a 30-min strict focus session and add 'Deep Work' to my tasks." },
+  { label: "Energy Audit", text: "Look at my sleep and mood from this week. Why am I feeling tired?" },
+  { label: "Goal Sync", text: "Remind me why I'm working on my biggest goal and suggest one small step for today." },
+  { label: "Reset Day", text: "My morning was chaotic. Help me rebuild my schedule for the rest of the day." }
+];
 
 export const AIAssistant: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'model', text: "Hey! I'm here to help you crush your goals today. What's on your mind?", type: 'text' }
+    { role: 'model', text: "Hey! I'm your LifeOS Coach. How can I help you today?", type: 'text' }
   ]);
   const [isThinking, setIsThinking] = useState(false);
+  const [memory, setMemory] = useState<StrategistMemory>(INITIAL_MEMORY);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // --- 1. FULL ACCESS CONTEXTS ---
-  const { tasks, addTask, deleteTask, updateTask, toggleTask } = useTasks();
-  const { habits, addHabit, toggleHabit, deleteHabit } = useHabits();
-  const { goals, addGoal, updateProgress } = useGoals();
-  const { addEntry: addJournal } = useJournal();
-  const { addTransaction, accounts } = useFinance();
-  const { mealPlans, recipes, foods, assignMeal, addToShoppingList, addFood } = useMeals();
-  const { logs: sleepLogs, addSleepLog } = useSleep();
-  const { timeBlocks, addBlock: addTimeBlock, deleteBlock: deleteTimeBlock } = useTimeBlocks();
-  const { updatePrayerStatus, quran, prayers } = useIslamic();
+  const { tasks, addTask } = useTasks();
+  const { habits } = useHabits();
+  const { goals } = useGoals();
+  const { journal } = useJournal();
+  const { transactions } = useFinance();
+  const { logs: sleepLogs } = useSleep();
+  const { timeBlocks, deleteBlock: deleteTimeBlock, addBlock: addTimeBlock } = useTimeBlocks();
+  const { prayers: deenPrayers } = useIslamic();
+  const { enableStrictMode, settings: dwSettings } = useDigitalWellness();
+  const { reports, addReport } = useReports();
+  // Fix: Get settings from context to resolve missing reference
+  const { settings } = useSettings();
+
+  useEffect(() => {
+    const loadMemory = async () => {
+      const stored = await storage.load<StrategistMemory>(MEMORY_STORAGE_KEY);
+      if (stored) setMemory(stored);
+    };
+    loadMemory();
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   useEffect(() => {
-    scrollToBottom();
+    if (isOpen) scrollToBottom();
   }, [messages, isOpen, isThinking]);
 
-  // --- 2. "GOD MODE" DATA SNAPSHOT ---
-  const getContextSnapshot = () => {
-    const today = getTodayKey();
-    const safeStringify = (obj: any) => {
-      try {
-        const str = JSON.stringify(obj);
-        return str.length > 3000 ? str.substring(0, 3000) + "..." : str;
-      } catch (e) {
-        return "Data too complex";
-      }
+  const getContextSnapshot = useCallback((days: number = 1) => {
+    const today = new Date();
+    const result: any = {
+      meta: { time: new Date().toLocaleString(), todayKey: getTodayKey(), daysAnalyzed: days },
+      longTermMemory: memory,
+      days: []
     };
 
-    return safeStringify({
-      currentTime: new Date().toLocaleString(),
-      dateKey: today,
-      tasks: tasks.filter(t => !t.completed).map(t => ({ id: t.id, title: t.title, priority: t.priority, due: t.dueDate })),
-      habits: habits.filter(h => !h.archived).map(h => ({ id: h.id, name: h.name, completedToday: h.completedDates.includes(today) })),
-      goals: goals.filter(g => g.status === 'in-progress').map(g => ({ id: g.id, title: g.title, progress: g.currentValue, target: g.targetValue })),
-      finance: {
-        accounts: accounts.map(a => ({ id: a.id, name: a.name, balance: a.balance })),
-        currency: "USD" 
-      },
-      calendar: timeBlocks.filter(b => b.date === today).map(b => ({ id: b.id, title: b.title, start: b.startTime, end: b.endTime })),
-      meals: {
-        todayPlan: mealPlans.find(p => p.date === today),
-        pantry: foods.slice(0, 10).map(f => ({ id: f.id, name: f.name })),
-        recipes: recipes.slice(0, 5).map(r => ({ id: r.id, name: r.title }))
-      },
-      deen: {
-        todayPrayers: prayers.find(p => p.date === today) || "No record",
-        quran: quran.completedRubus.length
-      },
-      sleep: sleepLogs.slice(0, 1)
-    });
-  };
+    for (let i = 0; i < days; i++) {
+        const d = new Date();
+        d.setDate(today.getDate() - i);
+        const key = formatDateKey(d);
 
-  // --- 3. EXTENSIVE TOOLKIT ---
+        result.days.push({
+            date: key,
+            tasks: tasks.filter(t => t.dueDate === key).map(t => ({ title: t.title, priority: t.priority, done: t.completed })),
+            habits: habits.filter(h => h.frequency.days.includes(d.getDay()) || h.completedDates.includes(key)).map(h => ({ name: h.name, done: h.completedDates.includes(key) })),
+            sleep: sleepLogs.find(l => l.date === key),
+            journal: journal.find(j => j.date.startsWith(key))?.mood || 'none',
+            spending: transactions.filter(t => t.date === key && t.type === 'expense').reduce((acc, t) => acc + t.amount, 0),
+            deen: deenPrayers.find(p => p.date === key)
+        });
+    }
+
+    return JSON.stringify(result);
+  }, [tasks, habits, sleepLogs, journal, transactions, deenPrayers, memory]);
+
   const tools: FunctionDeclaration[] = [
-    // --- TASKS ---
+    {
+      name: "updateLongTermMemory",
+      description: "Remember something important about the user.",
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          updateField: { type: Type.STRING, enum: ["bestWorkingHours", "commonExcuses", "failurePoints", "disciplineThreshold", "stressSignals", "recoverySpeed", "significantWins", "lastAnalysisLesson", "feedbackPreference", "motivationalDrivers"] },
+          newValue: { type: Type.STRING }
+        },
+        required: ["updateField", "newValue"]
+      }
+    },
+    {
+      name: "triggerStrictMode",
+      description: "Activate focus mode.",
+      parameters: { type: Type.OBJECT, properties: { durationMinutes: { type: Type.NUMBER } }, required: ["durationMinutes"] }
+    },
     {
       name: "createTask",
-      description: "Create a new todo task.",
+      description: "Add a new task.",
       parameters: {
         type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING },
-          priority: { type: Type.STRING, enum: ["low", "medium", "high"] },
-          dueDate: { type: Type.STRING, description: "YYYY-MM-DD" }
-        },
+        properties: { title: { type: Type.STRING }, priority: { type: Type.STRING, enum: ["low", "medium", "high"] } },
         required: ["title"]
-      }
-    },
-    {
-      name: "updateTask",
-      description: "Update or complete a task. To complete, set isCompleted to true.",
-      parameters: {
-        type: Type.OBJECT,
-        properties: {
-          taskId: { type: Type.STRING },
-          newTitle: { type: Type.STRING },
-          isCompleted: { type: Type.BOOLEAN }
-        },
-        required: ["taskId"]
-      }
-    },
-    {
-      name: "deleteTask",
-      description: "Permanently remove a task.",
-      parameters: { type: Type.OBJECT, properties: { taskId: { type: Type.STRING } }, required: ["taskId"] }
-    },
-
-    // --- HABITS ---
-    {
-      name: "createHabit",
-      description: "Start tracking a new habit.",
-      parameters: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, category: { type: Type.STRING } }, required: ["name"] }
-    },
-    {
-      name: "logHabit",
-      description: "Mark a habit as done for today. If habitName is provided and not found, it will be automatically created.",
-      parameters: { 
-        type: Type.OBJECT, 
-        properties: { 
-          habitId: { type: Type.STRING, description: "Optional if habitName is provided" },
-          habitName: { type: Type.STRING, description: "Use if ID is unknown. Will auto-create if missing." }
-        }
-      }
-    },
-    {
-      name: "deleteHabit",
-      description: "Delete a habit tracker.",
-      parameters: { type: Type.OBJECT, properties: { habitId: { type: Type.STRING } }, required: ["habitId"] }
-    },
-
-    // --- GOALS ---
-    {
-      name: "createGoal",
-      description: "Set a new long-term goal.",
-      parameters: {
-        type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING },
-          targetValue: { type: Type.NUMBER },
-          unit: { type: Type.STRING }
-        },
-        required: ["title", "targetValue"]
-      }
-    },
-    {
-      name: "updateGoalProgress",
-      description: "Update the numeric progress of a goal.",
-      parameters: { type: Type.OBJECT, properties: { goalId: { type: Type.STRING }, newValue: { type: Type.NUMBER } }, required: ["goalId", "newValue"] }
-    },
-
-    // --- FINANCE ---
-    {
-      name: "addTransaction",
-      description: "Log income or expense.",
-      parameters: {
-        type: Type.OBJECT,
-        properties: {
-          description: { type: Type.STRING },
-          amount: { type: Type.NUMBER },
-          type: { type: Type.STRING, enum: ["expense", "income"] }
-        },
-        required: ["description", "amount", "type"]
-      }
-    },
-
-    // --- CALENDAR ---
-    {
-      name: "addCalendarEvent",
-      description: "Block time on the calendar.",
-      parameters: {
-        type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING },
-          startTime: { type: Type.STRING, description: "HH:MM" },
-          endTime: { type: Type.STRING, description: "HH:MM" },
-          date: { type: Type.STRING, description: "YYYY-MM-DD" }
-        },
-        required: ["title", "startTime", "endTime"]
-      }
-    },
-    {
-      name: "deleteCalendarEvent",
-      description: "Remove a time block.",
-      parameters: { type: Type.OBJECT, properties: { blockId: { type: Type.STRING } }, required: ["blockId"] }
-    },
-
-    // --- MEALS ---
-    {
-      name: "planMeal",
-      description: "Assign a meal to the schedule. If the food doesn't exist in library, it will be automatically created.",
-      parameters: {
-        type: Type.OBJECT,
-        properties: {
-          mealType: { type: Type.STRING, enum: ["breakfast", "lunch", "dinner", "snack"] },
-          itemName: { type: Type.STRING },
-          date: { type: Type.STRING }
-        },
-        required: ["mealType", "itemName"]
-      }
-    },
-    {
-      name: "addToShoppingList",
-      description: "Add item to grocery list.",
-      parameters: { type: Type.OBJECT, properties: { item: { type: Type.STRING } }, required: ["item"] }
-    },
-
-    // --- JOURNAL ---
-    {
-      name: "addJournalEntry",
-      description: "Write to the journal.",
-      parameters: {
-        type: Type.OBJECT,
-        properties: {
-          content: { type: Type.STRING },
-          mood: { type: Type.STRING, enum: ["happy", "sad", "neutral", "excited", "tired"] }
-        },
-        required: ["content"]
-      }
-    },
-
-    // --- DEEN ---
-    {
-      name: "logPrayer",
-      description: "Mark a prayer as performed.",
-      parameters: {
-        type: Type.OBJECT,
-        properties: {
-          prayerName: { type: Type.STRING, enum: ["fajr", "dhuhr", "asr", "maghrib", "isha"] },
-          isDone: { type: Type.BOOLEAN }
-        },
-        required: ["prayerName", "isDone"]
-      }
-    },
-    
-    // --- SLEEP ---
-    {
-      name: "logSleep",
-      description: "Log sleep duration.",
-      parameters: {
-        type: Type.OBJECT,
-        properties: {
-          bedTime: { type: Type.STRING, description: "HH:MM" },
-          wakeTime: { type: Type.STRING, description: "HH:MM" },
-          quality: { type: Type.NUMBER, description: "0-100" }
-        },
-        required: ["bedTime", "wakeTime"]
       }
     }
   ];
 
-  // --- 4. EXECUTION LOGIC ---
-  const handleSend = async () => {
-    if (!input.trim()) return;
+  const handleSend = async (forcedInput?: string) => {
+    const userMsg = forcedInput || input;
+    if (!userMsg.trim()) return;
     
-    const userMsg = input;
     setInput('');
     setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
     setIsThinking(true);
 
     const apiKey = getApiKey();
     if (!apiKey) {
-      setMessages(prev => [...prev, { role: 'model', text: "I'm having trouble connecting right now. Could you check if the API Key is set up?", isError: true }]);
+      setMessages(prev => [...prev, { role: 'model', text: "API Key missing. Check Settings.", isError: true }]);
       setIsThinking(false);
       return;
     }
 
     try {
       const ai = new GoogleGenAI({ apiKey });
-      const contextData = getContextSnapshot();
+      const contextData = getContextSnapshot(1);
       
       const systemPrompt = `
-        You are LifeOS, a warm, enthusiastic, and highly effective personal life coach.
-        
-        **Your Persona:**
-        - You are human-like, empathetic, and encouraging.
-        - NEVER speak like a robot (avoid phrases like "systems online", "processing", "analyzing data").
-        - NEVER say "I have access to all your data" or "I can read your files". Instead, simply USE the context provided to give helpful, personalized advice as if you've known the user for years.
-        - Be concise but friendly. Use emojis to add warmth.
-        
-        **Your Job:**
-        - Help the user manage their tasks, habits, finance, and well-being.
-        - If the user asks to do something (like add a task), use the available tools to do it instantly, then confirm it warmly (e.g., "Got it! I've added that to your list.").
-        - Provide motivation and clarity.
-        
-        **Context:**
-        The user's current status is provided in the JSON below. Use this to give personalized answers without explicitly announcing that you are reading it.
-        
-        ${contextData}
+        IDENTITY: You are LifeOS Coach — a smart, human-feeling coach.
+        TRAITS: Supportive, Honest, Warm.
+        STYLE: Short, natural sentences. One gentle suggestion per interaction.
+        CONTEXT: ${contextData}
       `;
 
       const result = await ai.models.generateContent({
@@ -312,10 +188,7 @@ export const AIAssistant: React.FC = () => {
           ...messages.slice(-6).map(m => ({ role: m.role === 'model' ? 'model' : 'user', parts: [{ text: m.text }] })),
           { role: 'user', parts: [{ text: userMsg }] }
         ],
-        config: { 
-          tools: [{ functionDeclarations: tools }],
-          systemInstruction: systemPrompt
-        }
+        config: { tools: [{ functionDeclarations: tools }], systemInstruction: systemPrompt }
       });
 
       const response = result;
@@ -326,241 +199,40 @@ export const AIAssistant: React.FC = () => {
           const args = call.args as any;
           try {
             switch (call.name) {
-              // TASKS
+              case 'updateLongTermMemory':
+                const field = args.updateField as keyof StrategistMemory;
+                setMemory(prev => {
+                  const updated = { ...prev };
+                  if (Array.isArray(updated[field])) {
+                    (updated[field] as string[]).push(args.newValue);
+                    updated[field] = [...new Set(updated[field] as string[])].slice(-10) as any;
+                  } else {
+                    updated[field] = args.newValue as any;
+                  }
+                  storage.save(MEMORY_STORAGE_KEY, updated);
+                  return updated;
+                });
+                actionFeedback += `🌱 Noted: ${args.newValue}\n`;
+                break;
+              case 'triggerStrictMode':
+                enableStrictMode(args.durationMinutes);
+                actionFeedback += `🔒 Focus mode: ${args.durationMinutes}m\n`;
+                break;
               case 'createTask':
-                await addTask({ 
-                  title: args.title, 
-                  priority: args.priority || 'medium', 
-                  dueDate: args.dueDate || getTodayKey(), 
-                  category: 'Inbox', 
-                  tags: ['AI'] 
-                });
-                actionFeedback += `✅ Added task: ${args.title}\n`;
-                break;
-              case 'updateTask':
-                if (args.isCompleted !== undefined) await toggleTask(args.taskId);
-                if (args.newTitle) await updateTask(args.taskId, { title: args.newTitle });
-                actionFeedback += `📝 Updated task\n`;
-                break;
-              case 'deleteTask':
-                await deleteTask(args.taskId);
-                actionFeedback += `🗑️ Deleted task\n`;
-                break;
-
-              // HABITS
-              case 'createHabit':
-                await addHabit({ 
-                  name: args.name, 
-                  category: args.category || 'General', 
-                  color: 'blue', 
-                  icon: '⚡', 
-                  type: 'boolean', 
-                  frequency: { type: 'daily', days: [0,1,2,3,4,5,6] }, 
-                  goal: 1, 
-                  unit: 'times', 
-                  timeOfDay: 'anytime', 
-                  reminders: [] 
-                });
-                actionFeedback += `✨ Tracking habit: ${args.name}\n`;
-                break;
-              case 'logHabit':
-                let hId = args.habitId;
-                const hName = args.habitName;
-                
-                if (!hId && hName) {
-                   const match = habits.find(h => h.name.toLowerCase().includes(hName.toLowerCase()));
-                   if (match) hId = match.id;
-                }
-
-                if (hId) {
-                   await toggleHabit(hId, getTodayKey());
-                   actionFeedback += `🔥 Habit marked done!\n`;
-                } else if (hName) {
-                   const newId = await addHabit({
-                      name: hName,
-                      category: 'General',
-                      color: 'blue',
-                      icon: '⚡',
-                      type: 'boolean',
-                      frequency: { type: 'daily', days: [0,1,2,3,4,5,6] },
-                      goal: 1,
-                      unit: 'times',
-                      timeOfDay: 'anytime',
-                      reminders: []
-                   });
-                   await toggleHabit(newId, getTodayKey());
-                   actionFeedback += `✨ Created & marked: ${hName}\n`;
-                } else {
-                   actionFeedback += `❓ Couldn't find that habit.\n`;
-                }
-                break;
-              case 'deleteHabit':
-                await deleteHabit(args.habitId);
-                actionFeedback += `🗑️ Removed habit\n`;
-                break;
-
-              // GOALS
-              case 'createGoal':
-                await addGoal({ 
-                  title: args.title, 
-                  targetValue: args.targetValue, 
-                  currentValue: 0, 
-                  unit: args.unit || 'units', 
-                  category: 'General', 
-                  timeFrame: 'quarterly', 
-                  type: 'numeric', 
-                  startDate: getTodayKey(), 
-                  targetDate: getTodayKey(), 
-                  priority: 'medium', 
-                  status: 'in-progress', 
-                  milestones: [], 
-                  tags: [], 
-                  color: 'indigo', 
-                  notes: [], 
-                  linkedHabitIds: [] 
-                });
-                actionFeedback += `🎯 Goal set: ${args.title}\n`;
-                break;
-              case 'updateGoalProgress':
-                await updateProgress(args.goalId, args.newValue);
-                actionFeedback += `📈 Progress updated\n`;
-                break;
-
-              // FINANCE
-              case 'addTransaction':
-                await addTransaction({ 
-                  description: args.description, 
-                  amount: args.amount, 
-                  type: args.type, 
-                  category: 'General', 
-                  date: getTodayKey(), 
-                  accountId: accounts[0]?.id || '1', 
-                  tags: ['AI'] 
-                });
-                actionFeedback += `💰 Logged ${args.type}\n`;
-                break;
-
-              // CALENDAR
-              case 'addCalendarEvent':
-                await addTimeBlock({ 
-                  title: args.title, 
-                  startTime: args.startTime, 
-                  endTime: args.endTime, 
-                  date: args.date || getTodayKey(), 
-                  category: 'Work', 
-                  color: 'blue',
-                  notes: 'Added by AI'
-                });
-                actionFeedback += `📅 Time blocked: ${args.title}\n`;
-                break;
-              case 'deleteCalendarEvent':
-                await deleteTimeBlock(args.blockId);
-                actionFeedback += `🗑️ Event removed\n`;
-                break;
-
-              // MEALS
-              case 'planMeal':
-                const targetName = (args.itemName || "").toLowerCase();
-                const recipeMatch = recipes.find(r => r.title.toLowerCase().includes(targetName));
-                const foodMatch = foods.find(f => f.name.toLowerCase().includes(targetName));
-                
-                if (recipeMatch) {
-                   await assignMeal(args.date || getTodayKey(), args.mealType, recipeMatch.id, 'recipe');
-                   actionFeedback += `🍳 Planned: ${recipeMatch.title}\n`;
-                } else if (foodMatch) {
-                   await assignMeal(args.date || getTodayKey(), args.mealType, foodMatch.id, 'food');
-                   actionFeedback += `🍎 Planned: ${foodMatch.name}\n`;
-                } else {
-                   const newId = await addFood({
-                      name: args.itemName,
-                      icon: '🍽️',
-                      calories: 0,
-                      protein: 0,
-                      carbs: 0,
-                      fat: 0,
-                      servingSize: '1 serving',
-                      category: 'General',
-                      isFavorite: false
-                   });
-                   await assignMeal(args.date || getTodayKey(), args.mealType, newId, 'food');
-                   actionFeedback += `🆕 Added & Planned: ${args.itemName}\n`;
-                }
-                break;
-              case 'addToShoppingList':
-                await addToShoppingList([{ 
-                  id: Date.now().toString(), 
-                  name: args.item, 
-                  amount: 1, 
-                  unit: 'pc', 
-                  category: 'Other', 
-                  checked: false, 
-                  isCustom: true 
-                }]);
-                actionFeedback += `🛒 Added to list: ${args.item}\n`;
-                break;
-
-              // DEEN
-              case 'logPrayer':
-                await updatePrayerStatus(args.prayerName, args.isDone);
-                actionFeedback += `🤲 Prayer logged: ${args.prayerName}\n`;
-                break;
-
-              // JOURNAL
-              case 'addJournalEntry':
-                await addJournal({ 
-                  title: 'AI Entry', 
-                  content: `<p>${args.content}</p>`, 
-                  mood: args.mood || 'neutral', 
-                  energyLevel: 5, 
-                  date: new Date().toISOString(), 
-                  tags: ['AI'], 
-                  isFavorite: false, 
-                  isLocked: false 
-                });
-                actionFeedback += `📔 Saved to journal\n`;
-                break;
-
-              // SLEEP
-              case 'logSleep':
-                const today = getTodayKey();
-                const start = new Date(`${today}T${args.bedTime}`);
-                const end = new Date(`${today}T${args.wakeTime}`);
-                if (end < start) end.setDate(end.getDate() + 1);
-                const duration = Math.round((end.getTime() - start.getTime()) / 60000);
-                
-                await addSleepLog({ 
-                  date: today, 
-                  bedTime: start.toISOString(), 
-                  wakeTime: end.toISOString(), 
-                  durationMinutes: duration, 
-                  qualityRating: args.quality || 75, 
-                  mood: 'normal', 
-                  factors: [], 
-                  naps: [] 
-                });
-                actionFeedback += `😴 Sleep logged\n`;
+                await addTask({ title: args.title, priority: args.priority || 'medium', dueDate: getTodayKey(), category: 'Inbox', tags: ['Coach'] });
+                actionFeedback += `📝 Added: ${args.title}\n`;
                 break;
             }
-          } catch (e) {
-            console.error(e);
-            actionFeedback += `❌ Could not complete: ${call.name}\n`;
-          }
+          } catch (e) {}
         }
       }
 
-      if (actionFeedback) {
-        setMessages(prev => [...prev, { role: 'model', text: actionFeedback, type: 'action' }]);
-      }
-
-      let responseText = response.text || "";
-      if (responseText.trim()) {
-         setMessages(prev => [...prev, { role: 'model', text: responseText }]);
-      } else if (!actionFeedback) {
-         setMessages(prev => [...prev, { role: 'model', text: "All done!", type: 'text' }]);
-      }
+      if (actionFeedback) setMessages(prev => [...prev, { role: 'model', text: actionFeedback, type: 'action' }]);
+      if (response.text?.trim()) setMessages(prev => [...prev, { role: 'model', text: response.text! }]);
+      else if (!actionFeedback) setMessages(prev => [...prev, { role: 'model', text: "I'm here." }]);
 
     } catch (e: any) {
-      setMessages(prev => [...prev, { role: 'model', text: "I'm having a little trouble connecting. Please try again in a moment.", isError: true }]);
+      setMessages(prev => [...prev, { role: 'model', text: "Technical hiccup. One sec.", isError: true }]);
     } finally {
       setIsThinking(false);
     }
@@ -574,136 +246,119 @@ export const AIAssistant: React.FC = () => {
   };
 
   return (
-    <>
-      {/* --- THE PULSING ORB TRIGGER (Themed) --- */}
+    <div className="fixed bottom-0 left-0 right-0 z-[100] pointer-events-none p-4 md:p-6 flex flex-col items-center">
+      
+      {/* TRIGGER / COLLAPSED BAR */}
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 z-[60] group cursor-pointer"
+          className="pointer-events-auto w-full max-w-lg h-12 bg-white/90 dark:bg-black/90 backdrop-blur-xl border border-gray-200 dark:border-white/10 rounded-2xl shadow-xl flex items-center justify-between px-5 group transition-all hover:scale-[1.02] active:scale-95 animate-in slide-in-from-bottom-4"
         >
-          <div className="relative flex items-center justify-center w-16 h-16">
-             {/* Outer Glow Ring */}
-             <div className="absolute inset-0 bg-gradient-to-r from-primary-500 to-primary-600 rounded-full blur-lg opacity-40 group-hover:opacity-80 animate-pulse transition-opacity duration-500" />
-             {/* Core */}
-             <div className="relative w-14 h-14 bg-white/90 dark:bg-black/90 backdrop-blur-xl border border-primary-200 dark:border-primary-800 rounded-full flex items-center justify-center text-primary-600 shadow-2xl overflow-hidden transition-transform group-hover:scale-110">
-                <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-primary-500/10 to-transparent rotate-45" />
-                <Sparkles size={24} strokeWidth={2} className="relative z-10" />
-             </div>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white shadow-lg">
+              <MessageCircle size={16} strokeWidth={2.5} />
+            </div>
+            {/* Fix: use settings instead of undefined globalSettings */}
+            <span className="text-xs font-bold text-gray-500">How's your day, {settings?.preferences?.language === 'ar' ? 'صديقي' : 'friend'}?</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {dwSettings.strictMode && <ShieldAlert size={14} className="text-red-500 animate-pulse" />}
+            <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Open Coach</span>
           </div>
         </button>
       )}
 
-      {/* --- HOLOGRAPHIC INTERFACE (Themed) --- */}
+      {/* EXPANDED RECTANGULAR PANEL */}
       {isOpen && (
         <div 
-          className={`fixed z-[100] transition-all duration-500 cubic-bezier(0.34, 1.56, 0.64, 1) flex flex-col overflow-hidden shadow-2xl border border-gray-200 dark:border-gray-800 ring-1 ring-black/5
-            ${isExpanded 
-              ? 'inset-2 sm:inset-6 rounded-[2.5rem] bg-white dark:bg-[#09090b]' 
-              : 'bottom-6 right-6 w-[90vw] sm:w-[420px] h-[650px] rounded-[2rem] bg-white dark:bg-[#09090b]'
-            }
-          `}
+          className="pointer-events-auto w-full max-w-2xl bg-white dark:bg-[#09090b] rounded-[2rem] border border-gray-200 dark:border-gray-800 shadow-[0_30px_100px_rgba(0,0,0,0.25)] flex flex-col overflow-hidden animate-in slide-in-from-bottom-6 fade-in duration-500 h-[450px]"
         >
-          {/* Futuristic Header */}
-          <div className="px-6 py-5 flex justify-between items-center bg-white dark:bg-[#09090b] border-b border-gray-100 dark:border-gray-800 relative shrink-0">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center shadow-lg shadow-primary-500/20">
-                <Bot size={20} className="text-white" />
+          {/* Compact Header */}
+          <div className="px-6 py-4 flex justify-between items-center bg-gray-50/50 dark:bg-white/[0.02] border-b border-gray-100 dark:border-white/10 shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white">
+                <Bot size={18} />
               </div>
               <div>
-                <h3 className="font-black text-gray-900 dark:text-white text-sm tracking-wider uppercase">LifeOS Coach</h3>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                   <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)] animate-pulse" />
-                   <span className="text-[10px] text-green-600 dark:text-green-400 font-mono tracking-widest">ONLINE</span>
+                <h3 className="font-black text-gray-900 dark:text-white text-[10px] tracking-[0.2em] uppercase">LifeOS Coach</h3>
+                <div className="flex items-center gap-1.5">
+                   <span className="w-1 h-1 rounded-full bg-green-500 animate-pulse" />
+                   <span className="text-[8px] text-gray-400 font-black uppercase tracking-widest">Synchronized</span>
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setIsExpanded(!isExpanded)} className="p-2 text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 rounded-lg transition-colors">
-                {isExpanded ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-              </button>
-              <button onClick={() => setIsOpen(false)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors">
-                <X size={18} />
-              </button>
-            </div>
+            <button onClick={() => setIsOpen(false)} className="p-2 text-gray-400 hover:text-red-500 rounded-lg transition-colors">
+              <X size={18} />
+            </button>
           </div>
 
-          {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar scroll-smooth">
+          {/* Chat Body - Smaller and denser */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-[image:radial-gradient(rgba(0,0,0,0.01)_1px,transparent_1px)] bg-[size:20px_20px]">
             {messages.map((msg, i) => (
-              <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} animate-in slide-in-from-bottom-2 fade-in duration-300`}>
-                
-                {/* Message Header (for Model) */}
-                {msg.role === 'model' && (
-                   <div className="flex items-center gap-2 mb-1.5 px-1">
-                      {msg.type === 'action' ? <Terminal size={10} className="text-emerald-600 dark:text-green-500" /> : <Cpu size={10} className="text-primary-500" />}
-                      <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">{msg.type === 'action' ? 'Action Log' : 'Coach'}</span>
-                   </div>
-                )}
-
-                {/* Message Content */}
+              <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} animate-in fade-in duration-300`}>
                 <div 
                   className={`
-                    max-w-[85%] p-4 text-sm leading-relaxed backdrop-blur-md shadow-sm relative overflow-hidden
+                    max-w-[85%] p-3 text-xs sm:text-sm leading-relaxed backdrop-blur-md border shadow-sm relative overflow-hidden
                     ${msg.role === 'user' 
-                      ? 'bg-primary-600 text-white rounded-2xl rounded-tr-sm font-medium' 
+                      ? 'bg-primary-600 text-white rounded-2xl rounded-tr-none font-bold border-transparent' 
                       : msg.type === 'action'
-                        ? 'bg-slate-50 border border-slate-200 text-emerald-700 dark:bg-black/40 dark:border-emerald-500/30 dark:text-emerald-400 font-mono text-xs rounded-xl shadow-sm'
+                        ? 'bg-amber-50 border-amber-200 text-amber-900 dark:bg-amber-950/20 dark:border-amber-500/30 dark:text-amber-200 rounded-xl font-bold'
                         : msg.isError 
-                          ? 'bg-red-50 border border-red-200 text-red-600 rounded-2xl rounded-tl-sm'
-                          : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-2xl rounded-tl-sm'
+                          ? 'bg-red-50 border-red-200 text-red-600 rounded-xl'
+                          : 'bg-white dark:bg-[#121214] text-gray-900 dark:text-gray-100 rounded-2xl rounded-tl-none border-gray-100 dark:border-white/5 font-medium'
                     }
                   `}
                 >
-                  {/* Subtle noise texture overlay */}
-                  <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-5 pointer-events-none mix-blend-overlay" />
-                  
-                  <span className="relative z-10 whitespace-pre-wrap">{msg.text}</span>
+                  <span className="whitespace-pre-wrap">{msg.text}</span>
                 </div>
               </div>
             ))}
-            
             {isThinking && (
               <div className="flex items-center gap-2 px-1 animate-pulse">
-                 <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900/20 flex items-center justify-center">
-                    <Activity size={16} className="text-primary-600 dark:text-primary-400" />
+                 <div className="w-5 h-5 rounded-lg bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center">
+                    <Sparkles size={10} className="text-primary-500" />
                  </div>
-                 <span className="text-xs font-mono text-primary-600 dark:text-primary-400/70">Thinking...</span>
+                 <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Thinking...</span>
               </div>
             )}
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input Area */}
-          <div className="p-4 sm:p-5 bg-white dark:bg-[#09090b] border-t border-gray-100 dark:border-gray-800 shrink-0">
-             <div className="relative group">
-                <div className="absolute -inset-0.5 bg-gradient-to-r from-primary-500/30 to-primary-600/30 rounded-2xl blur opacity-30 group-focus-within:opacity-100 transition duration-500" />
-                <div className="relative flex items-center bg-gray-50 dark:bg-black/60 border border-gray-200 dark:border-white/10 rounded-2xl overflow-hidden backdrop-blur-xl shadow-sm">
-                   <div className="pl-4 text-gray-400">
-                      <Terminal size={16} />
-                   </div>
-                   <input 
-                     value={input}
-                     onChange={(e) => setInput(e.target.value)}
-                     onKeyDown={handleKeyPress}
-                     placeholder="Ask me anything..."
-                     className="flex-1 bg-transparent border-none px-4 py-4 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:ring-0 outline-none font-medium"
-                     autoFocus
-                   />
-                   <button 
-                     onClick={handleSend}
-                     disabled={!input.trim() || isThinking}
-                     className="mr-2 p-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95"
+          {/* Bottom Area - Integrated Input */}
+          <div className="p-4 bg-gray-50/50 dark:bg-white/[0.02] border-t border-gray-100 dark:border-white/10 shrink-0">
+             
+             {/* Suggested Pills - Minimalist */}
+             <div className="flex gap-1.5 overflow-x-auto no-scrollbar mb-3">
+                {SUGGESTED_PROMPTS.map((prompt, i) => (
+                   <button
+                     key={i}
+                     onClick={() => handleSend(prompt.text)}
+                     className="px-2.5 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full text-[9px] font-bold text-gray-500 whitespace-nowrap hover:border-primary-500 hover:text-primary-600 transition-all flex items-center gap-1 shrink-0 shadow-sm"
                    >
-                      <ChevronRight size={18} strokeWidth={3} />
+                      <Lightbulb size={10} /> {prompt.label}
                    </button>
-                </div>
+                ))}
              </div>
-             <p className="text-[9px] text-center text-gray-400 dark:text-gray-500 mt-3 font-mono uppercase tracking-widest flex items-center justify-center gap-2">
-                <Zap size={8} fill="currentColor" /> LifeOS Neural Engine v1.0
-             </p>
+
+             <div className="relative flex items-center bg-white dark:bg-black/60 border border-gray-200 dark:border-white/10 rounded-2xl overflow-hidden focus-within:ring-4 focus-within:ring-primary-500/10 transition-all shadow-sm">
+                <input 
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyPress}
+                  placeholder="Chat with your coach..."
+                  className="flex-1 bg-transparent border-none px-4 py-3 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:ring-0 outline-none font-medium"
+                />
+                <button 
+                  onClick={() => handleSend()}
+                  disabled={!input.trim() || isThinking}
+                  className="mr-2 p-2 bg-primary-600 text-white rounded-xl disabled:opacity-30 transition-all active:scale-90 hover:bg-primary-700"
+                >
+                   <ChevronRight size={18} strokeWidth={3} />
+                </button>
+             </div>
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 };

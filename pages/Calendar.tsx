@@ -1,13 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, ArrowLeft } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, ArrowLeft, CalendarRange, X as XIcon } from 'lucide-react';
 import { useHabits } from '../context/HabitContext';
 import { useTasks } from '../context/TaskContext';
 import { getDaysInMonth, isSameMonth, isToday, formatDateKey } from '../utils/dateUtils';
 import { TimeBlockingView } from '../components/calendar/TimeBlockingView';
+import { WeeklyView } from '../components/calendar/WeeklyView';
 
 const Calendar: React.FC = () => {
-  const [viewMode, setViewMode] = useState<'month' | 'day'>('month');
+  const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
   
   // State for Day View
@@ -23,6 +24,10 @@ const Calendar: React.FC = () => {
   const handlePrev = () => {
     if (viewMode === 'month') {
       setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+    } else if (viewMode === 'week') {
+      const prevWeek = new Date(currentDate);
+      prevWeek.setDate(prevWeek.getDate() - 7);
+      setCurrentDate(prevWeek);
     } else {
       const prevDay = new Date(selectedDateKey);
       prevDay.setDate(prevDay.getDate() - 1);
@@ -33,6 +38,10 @@ const Calendar: React.FC = () => {
   const handleNext = () => {
     if (viewMode === 'month') {
       setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+    } else if (viewMode === 'week') {
+      const nextWeek = new Date(currentDate);
+      nextWeek.setDate(nextWeek.getDate() + 7);
+      setCurrentDate(nextWeek);
     } else {
       const nextDay = new Date(selectedDateKey);
       nextDay.setDate(nextDay.getDate() + 1);
@@ -57,6 +66,11 @@ const Calendar: React.FC = () => {
     const isCurrentMonth = isSameMonth(day, currentDate);
     const isDayToday = isToday(day);
     
+    // Check if day is in the past (before today)
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const isDayPast = day.getTime() < todayStart.getTime();
+    
     // Habits
     const dayHabits = habits.filter(h => {
        if (h.archived) return false;
@@ -75,11 +89,18 @@ const Calendar: React.FC = () => {
         key={dateKey}
         onClick={() => handleDateClick(day)}
         className={`
-           min-h-[70px] sm:min-h-[100px] border-b border-r border-gray-100 dark:border-gray-700 p-1 sm:p-2 flex flex-col gap-1 transition-all cursor-pointer group hover:bg-gray-50 dark:hover:bg-gray-800/50
+           min-h-[70px] sm:min-h-[100px] border-b border-r border-gray-100 dark:border-gray-700 p-1 sm:p-2 flex flex-col gap-1 transition-all cursor-pointer group hover:bg-gray-50 dark:hover:bg-gray-800/50 relative
            ${!isCurrentMonth ? 'bg-gray-50/30 dark:bg-gray-900/30 text-opacity-40' : 'bg-white dark:bg-gray-800'}
         `}
       >
-         <div className="flex justify-between items-start">
+         {/* Past Day "X" Overlay */}
+         {isDayPast && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 opacity-[0.07] dark:opacity-[0.12]">
+               <XIcon size={isCurrentMonth ? 80 : 60} strokeWidth={1} className="text-gray-900 dark:text-white" />
+            </div>
+         )}
+
+         <div className="flex justify-between items-start relative z-10">
             <span className={`
                w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-full text-xs sm:text-sm font-medium transition-transform
                ${isDayToday ? 'bg-primary-600 text-white shadow-md' : isCurrentMonth ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400 dark:text-gray-600'}
@@ -89,7 +110,7 @@ const Calendar: React.FC = () => {
          </div>
 
          {/* Indicators */}
-         <div className="flex-1 flex flex-col justify-end gap-1">
+         <div className="flex-1 flex flex-col justify-end gap-1 relative z-10">
             {/* Task Bars */}
             {dayTasks.length > 0 && (
                <div className="flex flex-col gap-0.5">
@@ -120,12 +141,12 @@ const Calendar: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-500 pb-20 h-full flex flex-col">
+    <div className="space-y-4 animate-in fade-in duration-500 h-[calc(100vh-100px)] flex flex-col pb-safe">
       
       {/* Header */}
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-3 shrink-0 bg-white dark:bg-gray-900 p-3 sm:p-4 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm">
         <div className="flex items-center gap-3">
-           {viewMode === 'day' && (
+           {(viewMode === 'day' || viewMode === 'week') && (
               <button onClick={() => setViewMode('month')} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
                  <ArrowLeft size={18} className="text-gray-600 dark:text-gray-300" />
               </button>
@@ -134,26 +155,37 @@ const Calendar: React.FC = () => {
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                  {viewMode === 'month' 
                     ? currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-                    : new Date(selectedDateKey).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
+                    : viewMode === 'week'
+                      ? `Week of ${currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                      : new Date(selectedDateKey).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
                  }
               </h1>
               <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                 {viewMode === 'month' ? 'Monthly Overview' : 'Daily Schedule'}
+                 {viewMode === 'month' ? 'Monthly Overview' : viewMode === 'week' ? 'Weekly Blocking' : 'Daily Schedule'}
               </p>
            </div>
         </div>
         
-        <div className="flex items-center gap-3">
-           <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
+        <div className="flex items-center gap-3 overflow-x-auto no-scrollbar">
+           <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl shrink-0">
               <button 
                 onClick={() => setViewMode('month')}
                 className={`p-1.5 rounded-lg transition-all ${viewMode === 'month' ? 'bg-white dark:bg-gray-700 text-primary-600 shadow-sm' : 'text-gray-500'}`}
+                title="Month View"
               >
                  <CalendarIcon size={16} />
               </button>
               <button 
+                onClick={() => setViewMode('week')}
+                className={`p-1.5 rounded-lg transition-all ${viewMode === 'week' ? 'bg-white dark:bg-gray-700 text-primary-600 shadow-sm' : 'text-gray-500'}`}
+                title="Week View"
+              >
+                 <CalendarRange size={16} />
+              </button>
+              <button 
                 onClick={() => setViewMode('day')}
                 className={`p-1.5 rounded-lg transition-all ${viewMode === 'day' ? 'bg-white dark:bg-gray-700 text-primary-600 shadow-sm' : 'text-gray-500'}`}
+                title="Day View"
               >
                  <Clock size={16} />
               </button>
@@ -167,7 +199,7 @@ const Calendar: React.FC = () => {
               </button>
               <button 
                 onClick={handleToday}
-                className="px-2.5 py-1 text-xs font-bold text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                className="px-2.5 py-1 text-xs font-bold text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors whitespace-nowrap"
               >
                 Today
               </button>
@@ -182,7 +214,7 @@ const Calendar: React.FC = () => {
       <div className="flex-1 bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden flex flex-col relative">
          
          {viewMode === 'month' ? (
-            <div className="flex flex-col h-full">
+            <div className="flex flex-col h-full overflow-hidden">
                {/* Weekday Headers */}
                <div className="grid grid-cols-7 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50 shrink-0">
                   {weekDays.map(day => (
@@ -193,10 +225,12 @@ const Calendar: React.FC = () => {
                </div>
                
                {/* Month Grid */}
-               <div className="flex-1 grid grid-cols-7 auto-rows-fr overflow-y-auto">
+               <div className="flex-1 grid grid-cols-7 auto-rows-fr overflow-y-auto custom-scrollbar">
                   {days.map(day => renderMonthCell(day))}
                </div>
             </div>
+         ) : viewMode === 'week' ? (
+            <WeeklyView currentDate={currentDate} />
          ) : (
             <TimeBlockingView date={selectedDateKey} />
          )}

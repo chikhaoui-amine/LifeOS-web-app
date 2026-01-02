@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Check, Flame, MoreHorizontal, Edit2, Archive, Trash2, X } from 'lucide-react';
 import { Habit } from '../types';
-import { calculateStreak } from '../utils/dateUtils';
+import { calculateStreak, formatDateKey } from '../utils/dateUtils';
 import { HabitGrid } from './HabitGrid';
 import { triggerConfetti } from '../utils/confetti';
 
@@ -26,11 +26,31 @@ export const HabitCard: React.FC<HabitCardProps> = ({
   const [showMenu, setShowMenu] = useState(false);
   const streak = calculateStreak(habit.completedDates);
   
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  
-  const completionsLast30Days = habit.completedDates.filter(d => new Date(d) >= thirtyDaysAgo).length;
-  const strength = Math.min(100, Math.round((streak * 4) + (completionsLast30Days * 2.5)));
+  // Calculate Weekly Progress (Last 7 Days)
+  const last7Days = Array.from({ length: 7 }).map((_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    return d;
+  });
+
+  let scheduledCount = 0;
+  let completedCount = 0;
+
+  last7Days.forEach(date => {
+    const dayIndex = date.getDay();
+    // Check if habit is scheduled for this day of the week
+    if (habit.frequency.days.includes(dayIndex)) {
+      scheduledCount++;
+      const dateKey = formatDateKey(date);
+      if (habit.completedDates.includes(dateKey)) {
+        completedCount++;
+      }
+    }
+  });
+
+  const weeklyProgress = scheduledCount > 0 
+    ? Math.round((completedCount / scheduledCount) * 100) 
+    : 0;
 
   const colorMap: Record<string, string> = {
     indigo: 'text-indigo-600 bg-indigo-50 dark:text-indigo-400 dark:bg-indigo-900/20',
@@ -159,10 +179,10 @@ export const HabitCard: React.FC<HabitCardProps> = ({
                <div className="h-1 flex-1 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                  <div 
                    className={`h-full rounded-full transition-all duration-700 ease-out ${completedButtonClass}`}
-                   style={{ width: `${strength}%` }}
+                   style={{ width: `${weeklyProgress}%` }}
                  />
                </div>
-               <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest">{strength}%</span>
+               <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest">{weeklyProgress}%</span>
              </div>
           </div>
         </div>

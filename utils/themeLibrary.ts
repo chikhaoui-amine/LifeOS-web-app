@@ -67,18 +67,18 @@ export const PREBUILT_THEMES: Theme[] = [
     name: 'Ocean Blue',
     type: 'light',
     colors: {
-      primary: '#0ea5e9', // Sky
+      primary: '#0284c7', // Sky 700
       background: '#f0f9ff', // Sky 50
       surface: '#ffffff',
       text: '#0c4a6e',
-      textSecondary: '#0284c7',
+      textSecondary: '#0369a1',
       border: '#bae6fd',
       success: '#10b981',
       error: '#f43f5e',
       warning: '#f59e0b',
       info: '#0ea5e9',
     },
-    radius: 'full',
+    radius: 'xl',
     font: 'Inter',
   },
   {

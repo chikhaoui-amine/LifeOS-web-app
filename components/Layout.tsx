@@ -17,7 +17,8 @@ import {
   RefreshCw,
   Trophy,
   Zap,
-  Sparkles
+  Sparkles,
+  FileText
 } from 'lucide-react';
 import { NavRoute, LanguageCode } from '../types';
 import { useSettings } from '../context/SettingsContext';
@@ -44,6 +45,7 @@ export const Layout: React.FC = () => {
     { id: 'tasks', path: '/tasks', label: t.nav.tasks, icon: ListTodo },
     { id: 'goals', path: '/goals', label: t.nav.goals, icon: Target },
     { id: 'calendar', path: '/calendar', label: t.nav.calendar, icon: CalendarDays },
+    { id: 'reports', path: '/reports', label: 'Reports', icon: FileText },
     { id: 'meals', path: '/meals', label: t.nav.meals, icon: Utensils },
     { id: 'sleep', path: '/sleep', label: t.nav.sleep, icon: BedDouble },
     { id: 'journal', path: '/journal', label: t.nav.journal, icon: Book },
@@ -54,7 +56,15 @@ export const Layout: React.FC = () => {
   ];
 
   const tabs = allRoutes.filter(route => {
+    // 1. Mandatory modules
+    if (['today', 'settings'].includes(route.id)) return true;
+    
+    // 2. User disabled modules
+    if (settings?.disabledModules?.includes(route.id)) return false;
+
+    // 3. Special conditions
     if (route.id === 'deen' && !settings?.preferences?.enableIslamicFeatures) return false;
+    
     return true;
   });
 
@@ -104,9 +114,9 @@ export const Layout: React.FC = () => {
         <div className="max-w-full 2xl:max-w-none mx-auto w-full relative">
           <div className="flex items-center h-16 px-4 lg:px-8 gap-3">
             
-            {/* Logo / Brand (Hidden on mobile to save space, or mini icon) */}
+            {/* Logo / Brand - Themed Color Fix */}
             <div className="hidden lg:flex items-center gap-2 mr-4 text-primary-600 dark:text-white font-black tracking-tight text-xl">
-               <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary-500/20">
+               <div className="w-8 h-8 bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 rounded-xl flex items-center justify-center shadow-lg shadow-primary-500/10">
                   <Zap size={18} fill="currentColor" />
                </div>
                LifeOS
@@ -122,7 +132,7 @@ export const Layout: React.FC = () => {
                   to={route.path}
                   className={({ isActive }) => `
                     relative flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-full text-[11px] sm:text-xs lg:text-sm font-bold transition-all duration-300 whitespace-nowrap select-none snap-start group
-                    ${isActive ? 'active-nav-item bg-primary-600 text-white shadow-lg shadow-primary-500/25 scale-100' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-900 hover:text-gray-900 dark:hover:text-white active:scale-95'}
+                    ${isActive ? 'active-nav-item bg-primary-600 text-white shadow-lg shadow-primary-500/25 scale-100' : 'hover:bg-gray-100/50 dark:hover:bg-gray-900 active:scale-95'}
                   `}
                 >
                   {({ isActive }) => (

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Plus, Check, Clock, Trash2 } from 'lucide-react';
+import { Plus, Check, Brain, Users, Home, Dumbbell, BookOpen, Coffee, Circle, Palette, DollarSign, Heart, MessageCircle, Archive, Briefcase, ShoppingCart, Plane } from 'lucide-react';
 import { useTimeBlocks } from '../../context/TimeBlockContext';
 import { TimeBlockModal } from './TimeBlockModal';
 import { TimeBlock } from '../../types';
@@ -10,77 +10,23 @@ interface TimeBlockingViewProps {
   date: string;
 }
 
-// Layout Algorithm for Side-by-Side Events
-const calculateEventLayout = (events: TimeBlock[]) => {
-  if (events.length === 0) return [];
-
-  // 1. Sort by start time, then duration
-  const sorted = [...events].sort((a, b) => {
-    if (a.startTime === b.startTime) {
-       const durA = parseInt(a.endTime.replace(':','')) - parseInt(a.startTime.replace(':',''));
-       const durB = parseInt(b.endTime.replace(':','')) - parseInt(b.startTime.replace(':',''));
-       return durB - durA;
-    }
-    return a.startTime.localeCompare(b.startTime);
-  });
-
-  // 2. Group overlapping events
-  const groups: TimeBlock[][] = [];
-  let currentGroup: TimeBlock[] = [];
-  let groupEndTime = -1;
-
-  sorted.forEach(event => {
-    const start = parseInt(event.startTime.replace(':', ''));
-    const end = parseInt(event.endTime.replace(':', ''));
-    
-    if (currentGroup.length === 0) {
-      currentGroup.push(event);
-      groupEndTime = end;
-    } else {
-      if (start < groupEndTime) {
-        currentGroup.push(event);
-        groupEndTime = Math.max(groupEndTime, end);
-      } else {
-        groups.push(currentGroup);
-        currentGroup = [event];
-        groupEndTime = end;
-      }
-    }
-  });
-  if (currentGroup.length > 0) groups.push(currentGroup);
-
-  // 3. Assign columns within groups
-  const result: any[] = [];
-  
-  groups.forEach(group => {
-    const columns: TimeBlock[][] = [];
-    group.forEach(event => {
-      let placed = false;
-      for (let i = 0; i < columns.length; i++) {
-        const lastInCol = columns[i][columns[i].length - 1];
-        // Simple string comparison works for HH:MM format
-        if (lastInCol.endTime <= event.startTime) {
-          columns[i].push(event);
-          result.push({ ...event, col: i, totalCols: 0 }); 
-          placed = true;
-          break;
-        }
-      }
-      if (!placed) {
-        columns.push([event]);
-        result.push({ ...event, col: columns.length - 1, totalCols: 0 });
-      }
-    });
-
-    const groupSize = columns.length;
-    result.forEach(item => {
-      if (group.find(g => g.id === item.id)) {
-        item.totalCols = groupSize;
-      }
-    });
-  });
-
-  return result;
+// Category Configuration (Color & Icon)
+const CATEGORY_CONFIG: Record<string, { color: string; icon: any; bg: string }> = {
+  'Deep Work': { color: '#818cf8', bg: 'bg-indigo-500', icon: Brain },
+  'Meeting': { color: '#fbbf24', bg: 'bg-amber-500', icon: Users },
+  'Chore': { color: '#34d399', bg: 'bg-emerald-500', icon: Home },
+  'Health': { color: '#f87171', bg: 'bg-red-500', icon: Dumbbell },
+  'Learning': { color: '#f472b6', bg: 'bg-pink-500', icon: BookOpen },
+  'Break': { color: '#9ca3af', bg: 'bg-gray-500', icon: Coffee },
+  'Creative': { color: '#a78bfa', bg: 'bg-violet-500', icon: Palette },
+  'Finance': { color: '#4ade80', bg: 'bg-green-500', icon: DollarSign },
+  'Family': { color: '#fb7185', bg: 'bg-rose-500', icon: Heart },
+  'Social': { color: '#60a5fa', bg: 'bg-blue-500', icon: MessageCircle },
+  'Admin': { color: '#94a3b8', bg: 'bg-slate-500', icon: Archive },
+  'Work': { color: '#60a5fa', bg: 'bg-blue-600', icon: Briefcase },
+  'Shopping': { color: '#fcd34d', bg: 'bg-yellow-500', icon: ShoppingCart },
+  'Travel': { color: '#2dd4bf', bg: 'bg-teal-500', icon: Plane },
+  'Other': { color: '#60a5fa', bg: 'bg-blue-500', icon: Circle },
 };
 
 export const TimeBlockingView: React.FC<TimeBlockingViewProps> = ({ date }) => {
@@ -92,25 +38,17 @@ export const TimeBlockingView: React.FC<TimeBlockingViewProps> = ({ date }) => {
 
   const blocks = getBlocksForDate(date);
   const isToday = date === getTodayKey();
-  
-  const layoutBlocks = useMemo(() => calculateEventLayout(blocks), [blocks]);
 
-  const PIXELS_PER_MINUTE = 2; // Taller for better readability
-  const START_HOUR = 0; 
+  // Layout Constants
+  const PIXELS_PER_MINUTE = 2; 
+  const START_HOUR = 0;
   const END_HOUR = 24;
+  const TOTAL_HEIGHT = (END_HOUR - START_HOUR) * 60 * PIXELS_PER_MINUTE;
 
-  const hexToRgba = (hex: string, alpha: number) => {
-    let c: any;
-    if(/^#([A-Fa-f0-9]{3}){1,2}$/.test(hex)){
-        c= hex.substring(1).split('');
-        if(c.length== 3){
-            c= [c[0], c[0], c[1], c[1], c[2], c[2]];
-        }
-        c= '0x'+c.join('');
-        return 'rgba('+[(c>>16)&255, (c>>8)&255, c&255].join(',')+','+alpha+')';
-    }
-    return hex || '#6366f1';
-  };
+  // Simple non-overlapping layout
+  const sortedBlocks = useMemo(() => {
+    return [...blocks].sort((a, b) => a.startTime.localeCompare(b.startTime));
+  }, [blocks]);
 
   useEffect(() => {
     const updateTime = () => {
@@ -122,18 +60,18 @@ export const TimeBlockingView: React.FC<TimeBlockingViewProps> = ({ date }) => {
     updateTime();
     const interval = setInterval(updateTime, 60000); 
 
-    // Initial scroll to now or 8am
+    // Initial scroll to 8am or current time
     if (scrollRef.current) {
         let scrollMins = 8 * 60; // Default 8am
         if (isToday) {
             const now = new Date();
-            scrollMins = Math.max(0, (now.getHours() * 60) - 60); // 1 hour before now
+            scrollMins = Math.max(0, (now.getHours() * 60) - 60); 
         }
         
-        // Wait for layout
         setTimeout(() => {
             if(scrollRef.current) {
-                scrollRef.current.scrollTo({ top: scrollMins * PIXELS_PER_MINUTE, behavior: 'smooth' });
+                const scrollY = scrollMins * PIXELS_PER_MINUTE;
+                scrollRef.current.scrollTo({ top: scrollY, behavior: 'smooth' });
             }
         }, 100);
     }
@@ -159,7 +97,9 @@ export const TimeBlockingView: React.FC<TimeBlockingViewProps> = ({ date }) => {
   const handleTimelineClick = (e: React.MouseEvent) => {
       if (!scrollRef.current) return;
       const rect = scrollRef.current.getBoundingClientRect();
+      // Adjust click Y based on scroll position
       const clickY = e.clientY - rect.top + scrollRef.current.scrollTop;
+      
       const clickedMinutes = Math.floor(clickY / PIXELS_PER_MINUTE);
       
       // Round to nearest 15
@@ -167,144 +107,150 @@ export const TimeBlockingView: React.FC<TimeBlockingViewProps> = ({ date }) => {
       const h = Math.floor(roundedMinutes / 60);
       const m = roundedMinutes % 60;
       
+      if (h >= END_HOUR) return;
+
       const timeString = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
       
-      setSelectedBlock({ startTime: timeString } as any); // Pre-fill
+      setSelectedBlock({ startTime: timeString } as any);
       setIsModalOpen(true);
   };
 
   return (
-    <div className="flex flex-col h-full relative">
+    <div className="flex flex-col h-full relative bg-[#09090b] text-white overflow-hidden font-sans">
       
       {/* Floating Add Button */}
       <button 
         onClick={() => { setSelectedBlock(null); setIsModalOpen(true); }}
-        className="absolute bottom-6 right-6 z-30 w-14 h-14 bg-primary-600 text-white rounded-full shadow-xl hover:bg-primary-700 hover:scale-105 active:scale-95 transition-all flex items-center justify-center"
+        className="absolute bottom-6 right-6 z-50 w-14 h-14 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center border-2 border-white/10"
       >
-        <Plus size={28} />
+        <Plus size={28} strokeWidth={2.5} />
       </button>
 
       {/* Timeline Scroll Area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto relative custom-scrollbar scroll-smooth bg-white dark:bg-gray-900">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto relative custom-scrollbar scroll-smooth">
          
          <div 
-            className="relative min-h-full" 
-            style={{ height: (END_HOUR - START_HOUR) * 60 * PIXELS_PER_MINUTE }}
+            className="relative w-full" 
+            style={{ height: TOTAL_HEIGHT }}
             onClick={handleTimelineClick}
          >
             
-            {/* Hour Markers & Grid */}
+            {/* 1. Hour Markers (Left Axis) */}
             {Array.from({ length: END_HOUR - START_HOUR }).map((_, i) => {
                const hour = START_HOUR + i;
+               const top = i * 60 * PIXELS_PER_MINUTE;
+               
                return (
                   <div 
                     key={hour} 
-                    className="absolute left-0 right-0 flex items-start pointer-events-none"
-                    style={{ top: i * 60 * PIXELS_PER_MINUTE, height: 60 * PIXELS_PER_MINUTE }}
+                    className="absolute left-0 w-full flex items-start pointer-events-none"
+                    style={{ top: top, height: 60 * PIXELS_PER_MINUTE }}
                   >
-                     <div className="w-16 shrink-0 text-right pr-3 -mt-2.5">
-                        <span className="text-xs font-medium text-gray-400 dark:text-gray-600">
-                           {String(hour).padStart(2, '0')}:00
+                     {/* Hour Number */}
+                     <div className="w-16 pl-4 pt-1">
+                        <span className="text-2xl font-bold text-gray-700 select-none">
+                           {String(hour).padStart(2, '0')}
                         </span>
                      </div>
-                     <div className="flex-1 border-t border-gray-100 dark:border-gray-800 w-full" />
+                     
+                     {/* Horizontal Guide Line (Subtle) */}
+                     {/* <div className="flex-1 border-t border-gray-800/50 mt-4 mr-4" /> */}
                   </div>
                );
             })}
 
-            {/* Current Time Indicator */}
+            {/* 2. Current Time Line */}
             {isToday && (
                <div 
-                 className="absolute left-0 right-0 z-10 pointer-events-none flex items-center"
+                 className="absolute left-0 right-0 z-40 pointer-events-none flex items-center"
                  style={{ top: currentTimeMinutes * PIXELS_PER_MINUTE }}
                >
-                  <div className="w-16 text-right pr-3">
-                     <span className="text-xs font-bold text-red-500">
+                  <div className="w-16 pl-2 pr-1 text-right">
+                     <span className="text-xs font-bold text-red-500 bg-[#09090b] px-1 py-0.5 rounded">
                         {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
                      </span>
                   </div>
-                  <div className="flex-1 relative h-px bg-red-500">
-                     <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-red-500 shadow-sm" />
-                  </div>
+                  <div className="flex-1 h-px bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]" />
                </div>
             )}
 
-            {/* Event Blocks */}
-            <div className="absolute top-0 bottom-0 left-16 right-4">
-               {layoutBlocks.map(block => {
+            {/* 3. Events */}
+            <div className="absolute top-0 bottom-0 left-[70px] right-2 sm:right-4">
+               {sortedBlocks.map(block => {
                   const startMins = getMinutes(block.startTime);
-                  const top = (startMins - (START_HOUR * 60)) * PIXELS_PER_MINUTE;
-                  const height = Math.max(block.duration * PIXELS_PER_MINUTE, 30); 
+                  const top = startMins * PIXELS_PER_MINUTE;
+                  const height = Math.max(block.duration * PIXELS_PER_MINUTE, 40); // Min visual height
                   
-                  const baseColor = block.color || '#6366f1';
+                  const config = CATEGORY_CONFIG[block.category] || CATEGORY_CONFIG['Other'];
+                  const Icon = config.icon;
                   const isCompleted = block.completed;
-                  
-                  const widthPercent = 100 / block.totalCols;
-                  const leftPercent = block.col * widthPercent;
 
                   return (
                      <div
                        key={block.id}
                        onClick={(e) => { e.stopPropagation(); setSelectedBlock(block); setIsModalOpen(true); }}
-                       className={`
-                         absolute rounded-xl overflow-hidden cursor-pointer transition-all duration-200 group border
-                         ${isCompleted 
-                            ? 'opacity-60 grayscale bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700' 
-                            : 'hover:z-30 hover:shadow-xl shadow-sm border-transparent'
-                         }
-                       `}
-                       style={{ 
-                          top: top + 2,
-                          height: height - 4, 
-                          left: `${leftPercent}%`,
-                          width: `calc(${widthPercent}% - 4px)`,
-                          backgroundColor: isCompleted ? undefined : hexToRgba(baseColor, 0.15),
-                          borderLeftWidth: '4px',
-                          borderLeftColor: isCompleted ? '#9ca3af' : baseColor,
-                          zIndex: 10 + block.col
-                       }}
+                       className="absolute w-full group z-10 transition-all duration-200"
+                       style={{ top: top, height: height }}
                      >
-                        <div className="h-full w-full px-3 py-1.5 flex flex-col relative">
-                           {/* Content */}
-                           <div className="min-w-0 flex-1">
-                                 <h4 
-                                    className={`text-xs font-bold truncate ${isCompleted ? 'text-gray-500 line-through' : 'text-gray-900 dark:text-white'}`}
-                                 >
+                        <div className="flex h-full gap-3">
+                           
+                           {/* Left Icon Pill */}
+                           <div 
+                              className={`
+                                w-12 sm:w-14 rounded-2xl flex flex-col items-center justify-center shrink-0 transition-all
+                                ${config.bg} ${isCompleted ? 'opacity-50 grayscale' : 'shadow-lg'}
+                              `}
+                              style={{ 
+                                height: '100%', 
+                                minHeight: '40px' 
+                              }}
+                           >
+                              <Icon size={20} className="text-white drop-shadow-sm" strokeWidth={2.5} />
+                           </div>
+
+                           {/* Right Content Card */}
+                           <div className={`
+                              flex-1 rounded-2xl border flex items-center justify-between px-4 py-2 transition-all
+                              ${isCompleted 
+                                ? 'bg-gray-900/40 border-gray-800 opacity-60' 
+                                : 'bg-[#18181b] border-gray-800 hover:border-gray-700 hover:bg-[#202023] shadow-sm'
+                              }
+                           `}>
+                              <div className="min-w-0 flex-1 pr-4">
+                                 <h4 className={`font-bold text-sm sm:text-base truncate leading-tight ${isCompleted ? 'text-gray-500 line-through' : 'text-white'}`}>
                                     {block.title}
                                  </h4>
-                                 <div className="flex items-center gap-1 text-[10px] opacity-80" style={{ color: isCompleted ? undefined : baseColor }}>
-                                    <Clock size={10} />
-                                    <span className="truncate">
-                                       {block.startTime} - {block.endTime}
-                                    </span>
+                                 <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-500 font-medium">
+                                    <span>{block.startTime} - {block.endTime}</span>
+                                    <span>•</span>
+                                    <span>{block.duration}m</span>
                                  </div>
-                           </div>
-                           
-                           {/* Action Buttons (Visible on Hover) */}
-                           <div className="absolute top-1 right-1 hidden group-hover:flex gap-1 bg-white/80 dark:bg-black/50 backdrop-blur rounded-lg p-1 shadow-sm">
-                              <button 
+                              </div>
+
+                              <button
                                 onClick={(e) => { e.stopPropagation(); toggleBlock(block.id); }}
-                                className={`p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors ${isCompleted ? 'text-green-600' : 'text-gray-500 hover:text-green-600'}`}
-                                title={isCompleted ? "Mark Incomplete" : "Complete"}
-                              >
-                                 <Check size={14} strokeWidth={3} />
-                              </button>
-                              <button 
-                                onClick={(e) => { 
-                                    e.stopPropagation(); 
-                                    if(confirm('Delete this block?')) deleteBlock(block.id); 
+                                className={`
+                                  w-6 h-6 sm:w-7 sm:h-7 rounded-lg border-2 flex items-center justify-center transition-all shrink-0
+                                  ${isCompleted 
+                                    ? `bg-${config.color} border-transparent text-white` 
+                                    : 'border-gray-600 text-transparent hover:border-gray-400'
+                                  }
+                                `}
+                                style={{ 
+                                   backgroundColor: isCompleted ? config.color : 'transparent',
+                                   borderColor: isCompleted ? 'transparent' : undefined 
                                 }}
-                                className="p-1 rounded text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
-                                title="Delete"
                               >
-                                 <Trash2 size={14} />
+                                 <Check size={14} strokeWidth={4} />
                               </button>
                            </div>
+
                         </div>
                      </div>
                   );
                })}
             </div>
+
          </div>
       </div>
 

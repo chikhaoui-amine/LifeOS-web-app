@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
-  Plus, CheckCircle2, ListTodo, Sun, Moon, Coffee, Edit3, Target, StickyNote, Sunrise, Calendar as CalendarIcon, Sparkles, ArrowRight, DollarSign, Droplets, Wind, Focus, Zap, CheckSquare 
+  Plus, CheckCircle2, ListTodo, Sun, Moon, Coffee, Edit3, Target, Sunrise, Calendar as CalendarIcon, Sparkles, ArrowRight, DollarSign, Droplets, Wind, Focus, Zap, CheckSquare 
 } from 'lucide-react';
 import { useHabits } from '../context/HabitContext';
 import { useTasks } from '../context/TaskContext';
@@ -30,9 +30,7 @@ const Today: React.FC = () => {
   
   const [activeModal, setActiveModal] = useState<'habit' | 'task' | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [noteInput, setNoteInput] = useState(settings?.scratchpad || '');
   const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [breathingActive, setBreathingActive] = useState(false);
 
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
@@ -89,12 +87,6 @@ const Today: React.FC = () => {
       .reduce((acc, tx) => acc + tx.amount, 0);
   }, [transactions]);
 
-  // Hydration Widget Data
-  const waterIntake = useMemo(() => {
-    const plan = mealPlans.find(p => p.date === todayKey);
-    return plan ? plan.waterIntake : 0;
-  }, [mealPlans, todayKey]);
-
   // Progress Calculation
   const totalHabits = todaysHabits.length;
   const completedHabits = todaysHabits.filter(h => h.completedDates.includes(todayKey)).length;
@@ -119,10 +111,6 @@ const Today: React.FC = () => {
     setActiveModal(null);
   };
 
-  const handleNoteBlur = () => {
-    updateSettings({ scratchpad: noteInput });
-  };
-
   const executeDeleteTask = async (id: string) => {
     await deleteTask(id);
     if (selectedTask?.id === id) setSelectedTask(null);
@@ -141,15 +129,6 @@ const Today: React.FC = () => {
     });
   };
 
-  // Breathing Logic
-  useEffect(() => {
-    let timeout: ReturnType<typeof setTimeout>;
-    if (breathingActive) {
-      timeout = setTimeout(() => setBreathingActive(false), 10000); // Stop after 10s automatically
-    }
-    return () => clearTimeout(timeout);
-  }, [breathingActive]);
-
   // Texture Class
   const boxClass = "bg-white dark:bg-gray-900 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-sm bg-[image:radial-gradient(rgba(0,0,0,0.02)_1px,transparent_1px)] dark:bg-[image:radial-gradient(rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:16px_16px] overflow-hidden hover:shadow-md transition-shadow duration-300";
 
@@ -159,86 +138,66 @@ const Today: React.FC = () => {
       {/* Bento Grid Layout */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 auto-rows-min">
         
-        {/* 1. Main Greeting Card (Span 8) */}
-        <div className="md:col-span-8 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden flex flex-col justify-between min-h-[280px]">
-           {/* Background Art */}
-           <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-[80px] -translate-y-1/3 translate-x-1/3 pointer-events-none mix-blend-overlay" />
-           <div className="absolute bottom-0 left-0 w-64 h-64 bg-black/20 rounded-full blur-[60px] translate-y-1/3 -translate-x-1/4 pointer-events-none" />
+        {/* 1. Main Greeting Card */}
+        <div 
+           className="md:col-span-12 bg-primary-600 rounded-[2.5rem] p-8 text-white relative overflow-hidden flex flex-col justify-between min-h-[300px] transition-all duration-700 group"
+           style={{
+             background: `linear-gradient(135deg, var(--color-primary-600) 0%, rgba(var(--color-primary-rgb), 0.7) 100%)`,
+             boxShadow: `0 25px 60px -15px rgba(var(--color-primary-rgb), 0.4), inset 0 2px 20px rgba(255,255,255,0.15)`
+           }}
+        >
+           {/* Animated Background Layers for Glow */}
+           <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(255,255,255,0.05)_50%,transparent_75%)] bg-[length:250%_250%] animate-[shimmer_12s_infinite_linear] pointer-events-none" />
+           <div className="absolute -top-20 -right-20 w-96 h-96 bg-white/10 rounded-full blur-[110px] pointer-events-none mix-blend-soft-light group-hover:scale-110 transition-transform duration-1000" />
+           <div className="absolute -bottom-10 -left-10 w-72 h-72 bg-primary-400/20 rounded-full blur-[90px] pointer-events-none opacity-60" />
            
            <div className="relative z-10 flex justify-between items-start">
-              <div>
-                 <div className="flex items-center gap-2 text-indigo-100 font-bold uppercase tracking-widest text-xs mb-3">
-                    <CalendarIcon size={12} /> {dateStr}
+              <div className="animate-in slide-in-from-left duration-700">
+                 <div className="flex items-center gap-2 text-primary-50 font-bold uppercase tracking-widest text-[10px] sm:text-xs mb-4 bg-white/15 w-fit px-4 py-1.5 rounded-full backdrop-blur-xl border border-white/20 shadow-lg">
+                    <CalendarIcon size={12} className="text-white" /> {dateStr}
                  </div>
-                 <h1 className="text-4xl sm:text-5xl font-black tracking-tight mb-2 leading-tight">{greeting},</h1>
-                 <p className="text-indigo-100 text-lg opacity-90 font-medium">{greetingSub}</p>
+                 <h1 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tight mb-3 leading-none drop-shadow-lg scale-in-center">{greeting},</h1>
+                 <p className="text-primary-50 text-lg md:text-xl opacity-90 font-medium tracking-tight max-w-sm">{greetingSub}</p>
               </div>
-              <div className="hidden sm:flex bg-white/20 backdrop-blur-md border border-white/20 p-2 rounded-2xl">
-                 <GreetingIcon size={32} className="text-white" />
+              <div className="hidden sm:flex bg-white/20 backdrop-blur-2xl border border-white/40 p-4 rounded-3xl shadow-2xl hover:rotate-12 hover:scale-110 transition-all duration-500 animate-in zoom-in duration-1000">
+                 <GreetingIcon size={48} className="text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.5)]" />
               </div>
            </div>
 
-           <div className="relative z-10 grid grid-cols-2 sm:grid-cols-4 gap-4 mt-8">
-              {/* Quick Stats in Hero */}
-              <div className="bg-black/20 backdrop-blur-sm rounded-2xl p-3 border border-white/10">
-                 <p className="text-[10px] uppercase font-bold text-indigo-200 mb-1">Tasks Done</p>
-                 <div className="text-2xl font-bold">{completedTasks}<span className="text-sm opacity-60">/{totalTasks}</span></div>
-                 <div className="h-1 bg-white/10 rounded-full mt-2 overflow-hidden"><div className="h-full bg-white transition-all" style={{width: `${taskProgress}%`}} /></div>
+           <div className="relative z-10 grid grid-cols-1 sm:grid-cols-3 gap-4 mt-10">
+              {/* Quick Stats with subtle glow bars */}
+              <div className="bg-white/10 backdrop-blur-xl rounded-[1.5rem] p-4 border border-white/20 hover:bg-white/20 transition-all duration-300 group/stat hover:-translate-y-1 shadow-lg">
+                 <p className="text-[10px] uppercase font-black text-primary-100 mb-2 tracking-widest opacity-80">Tasks Done</p>
+                 <div className="text-2xl font-black tracking-tighter">{completedTasks}<span className="text-sm opacity-50 ml-1">/{totalTasks}</span></div>
+                 <div className="h-1.5 bg-white/20 rounded-full mt-3 overflow-hidden shadow-inner">
+                    <div className="h-full bg-white transition-all duration-1000 shadow-[0_0_10px_white]" style={{width: `${taskProgress}%`}} />
+                 </div>
               </div>
-              <div className="bg-black/20 backdrop-blur-sm rounded-2xl p-3 border border-white/10">
-                 <p className="text-[10px] uppercase font-bold text-indigo-200 mb-1">Habit Streak</p>
-                 <div className="text-2xl font-bold">{completedHabits}<span className="text-sm opacity-60">/{totalHabits}</span></div>
-                 <div className="h-1 bg-white/10 rounded-full mt-2 overflow-hidden"><div className="h-full bg-emerald-400 transition-all" style={{width: `${habitProgress}%`}} /></div>
+              <div className="bg-white/10 backdrop-blur-xl rounded-[1.5rem] p-4 border border-white/20 hover:bg-white/20 transition-all duration-300 group/stat hover:-translate-y-1 shadow-lg">
+                 <p className="text-[10px] uppercase font-black text-primary-100 mb-2 tracking-widest opacity-80">Habit Streak</p>
+                 <div className="text-2xl font-black tracking-tighter">{completedHabits}<span className="text-sm opacity-50 ml-1">/{totalHabits}</span></div>
+                 <div className="h-1.5 bg-white/20 rounded-full mt-3 overflow-hidden shadow-inner">
+                    <div className="h-full bg-emerald-400 transition-all duration-1000 shadow-[0_0_10px_rgba(52,211,153,0.8)]" style={{width: `${habitProgress}%`}} />
+                 </div>
               </div>
-              <div className="bg-black/20 backdrop-blur-sm rounded-2xl p-3 border border-white/10">
-                 <p className="text-[10px] uppercase font-bold text-indigo-200 mb-1">Hydration</p>
-                 <div className="text-2xl font-bold">{waterIntake}<span className="text-sm opacity-60"> gls</span></div>
-                 <div className="h-1 bg-white/10 rounded-full mt-2 overflow-hidden"><div className="h-full bg-blue-400 transition-all" style={{width: `${Math.min(100, (waterIntake/8)*100)}%`}} /></div>
-              </div>
-              <div className="bg-black/20 backdrop-blur-sm rounded-2xl p-3 border border-white/10">
-                 <p className="text-[10px] uppercase font-bold text-indigo-200 mb-1">Daily Spend</p>
-                 <div className="text-xl font-bold truncate" title={getFormattedCurrency(dailySpend)}>{getFormattedCurrency(dailySpend)}</div>
-                 <div className="mt-2 text-[10px] text-white/60">Keep it lean!</div>
+              <div className="bg-white/10 backdrop-blur-xl rounded-[1.5rem] p-4 border border-white/20 hover:bg-white/20 transition-all duration-300 group/stat hover:-translate-y-1 shadow-lg overflow-hidden">
+                 <p className="text-[10px] uppercase font-black text-primary-100 mb-2 tracking-widest opacity-80">Daily Spend</p>
+                 <div className="text-xl font-black truncate drop-shadow-sm" title={getFormattedCurrency(dailySpend)}>{getFormattedCurrency(dailySpend)}</div>
+                 <div className="mt-3 text-[10px] text-white/70 font-black italic uppercase tracking-tighter">Stay Disciplined</div>
               </div>
            </div>
         </div>
 
-        {/* 2. Focus / Zen Widget (Span 4) */}
-        <div className={`md:col-span-4 ${boxClass} relative flex flex-col items-center justify-center p-6 text-center transition-all duration-700 ${breathingActive ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800' : ''}`}>
-           {breathingActive ? (
-              <div className="relative">
-                 <div className="w-32 h-32 bg-blue-400/20 rounded-full animate-ping absolute inset-0" />
-                 <div className="w-32 h-32 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold relative z-10 animate-pulse shadow-lg shadow-blue-500/30">
-                    Breathe
-                 </div>
-              </div>
-           ) : (
-              <>
-                 <div className="w-14 h-14 bg-sky-100 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400 rounded-full flex items-center justify-center mb-4">
-                    <Wind size={24} />
-                 </div>
-                 <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1">Need a Moment?</h3>
-                 <p className="text-gray-500 text-xs mb-6">Take a 10-second deep breath to reset.</p>
-                 <button 
-                   onClick={() => setBreathingActive(true)}
-                   className="px-6 py-2.5 bg-sky-500 hover:bg-sky-600 text-white rounded-xl font-bold shadow-lg shadow-sky-500/20 transition-all active:scale-95 text-xs uppercase tracking-widest"
-                 >
-                    Start Pulse
-                 </button>
-              </>
-           )}
-        </div>
-
-        {/* 3. Priority Tasks (Span 7) */}
+        {/* 2. Priority Tasks (Span 7) */}
         <div className={`md:col-span-7 ${boxClass} p-0 flex flex-col`}>
            <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
               <div className="flex items-center gap-2">
                  <Target className="text-red-500" size={18} />
-                 <h3 className="font-bold text-gray-900 dark:text-white">Priority Focus</h3>
+                 <h3 className="font-bold text-gray-900 dark:text-white uppercase tracking-tight">Priority Focus</h3>
               </div>
               <button 
                 onClick={() => { setEditingTask(null); setActiveModal('task'); }} 
-                className="text-xs bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 px-3 py-1.5 rounded-lg font-bold text-gray-600 dark:text-gray-300 transition-colors"
+                className="text-xs bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 px-3 py-1.5 rounded-lg font-bold text-gray-600 dark:text-gray-300 transition-colors shadow-sm"
               >
                  + New
               </button>
@@ -275,13 +234,13 @@ const Today: React.FC = () => {
            </div>
         </div>
 
-        {/* 4. Habits Widget (Span 5) */}
+        {/* 3. Habits Widget (Span 5) */}
         <div className={`md:col-span-5 ${boxClass} p-0 flex flex-col h-[400px]`}>
            <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
-              <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2 uppercase tracking-tight">
                  <CheckCircle2 size={18} className="text-emerald-500" /> Daily Habits
               </h3>
-              <button onClick={() => setActiveModal('habit')} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg text-gray-500 transition-colors">
+              <button onClick={() => setActiveModal('habit')} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg text-gray-500 transition-colors shadow-sm">
                  <Plus size={16} />
               </button>
            </div>
@@ -300,21 +259,6 @@ const Today: React.FC = () => {
                  <div className="text-center py-10 text-gray-400 text-xs">No habits scheduled for today.</div>
               )}
            </div>
-        </div>
-
-        {/* 5. Scratchpad (Span 12) */}
-        <div className={`md:col-span-12 ${boxClass} p-6 relative group bg-yellow-50/30 dark:bg-yellow-900/5 border-yellow-100 dark:border-yellow-900/30`}>
-           <div className="flex items-center gap-2 mb-3 text-yellow-600 dark:text-yellow-500">
-              <StickyNote size={18} />
-              <h3 className="text-xs font-black uppercase tracking-widest">{t.today.scratchpad}</h3>
-           </div>
-           <textarea 
-              value={noteInput}
-              onChange={(e) => setNoteInput(e.target.value)}
-              onBlur={handleNoteBlur}
-              placeholder="Capture a quick thought..."
-              className="w-full bg-transparent border-none resize-none text-base text-gray-700 dark:text-gray-300 focus:ring-0 h-20 leading-relaxed placeholder:text-gray-400 font-medium"
-           />
         </div>
 
       </div>

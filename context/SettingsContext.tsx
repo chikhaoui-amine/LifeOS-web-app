@@ -35,7 +35,10 @@ const DEFAULT_SETTINGS: AppSettings = {
     timeFormat: '12h',
     autoBackup: false,
     enableIslamicFeatures: true,
+    // Fix: Added missing reportDay property (0 for Sunday)
+    reportDay: 0,
   },
+  disabledModules: [],
   meals: {
     waterGoal: 8
   }
@@ -57,6 +60,10 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
     if (target.meals && source.meals) {
       result.meals = { ...target.meals, ...source.meals };
+    }
+    // Explicitly handle arrays like disabledModules
+    if (source.disabledModules) {
+      result.disabledModules = source.disabledModules;
     }
     return result;
   };

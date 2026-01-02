@@ -30,9 +30,9 @@ const Habits: React.FC = () => {
     onConfirm: () => void;
   }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [isManagingCategories, setIsManagingCategories] = useState(false);
+  // Default to list view
+  const [viewMode] = useState<'list' | 'grid'>('list');
+  const [selectedCategory] = useState('All');
   
   const todayKey = getTodayKey();
 
@@ -65,18 +65,6 @@ const Habits: React.FC = () => {
       onConfirm: () => deleteHabit(id),
     });
   };
-
-  const requestDeleteCategory = (category: string) => {
-     setConfirmConfig({
-      isOpen: true,
-      title: 'Delete Category',
-      message: `Are you sure you want to delete the category "${category}"? Habits in this category will become uncategorized.`,
-      onConfirm: () => {
-        deleteCategory(category);
-        if (selectedCategory === category) setSelectedCategory('All');
-      },
-    });
-  };
   
   const activeHabits = habits.filter(h => !h.archived);
   const filteredHabits = activeHabits.filter(h => {
@@ -102,85 +90,34 @@ const Habits: React.FC = () => {
     <div className="space-y-4 sm:space-y-8 animate-in fade-in duration-700 min-h-screen pb-24 w-full px-1">
       
       {/* Refined Header Section */}
-      <header className="space-y-3 sm:space-y-6 py-2">
-        <div>
-          <h1 className="text-2xl sm:text-4xl font-black text-gray-900 dark:text-white tracking-tighter leading-none uppercase">
-            {t.habits.title}
-          </h1>
-          <p className="text-gray-400 dark:text-gray-500 mt-1 font-bold text-[10px] sm:text-sm uppercase tracking-widest">
-            {t.habits.subtitle}
-          </p>
-        </div>
-        
-        <div className="flex items-center gap-2 sm:gap-4">
-           <div className="flex bg-white dark:bg-gray-800 p-1 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
+      <header className="space-y-3 sm:space-y-6 py-2 border-b border-gray-100 dark:border-gray-800 pb-6">
+        <div className="flex justify-between items-end">
+          <div>
+            <h1 className="text-2xl sm:text-4xl font-black text-gray-900 dark:text-white tracking-tighter leading-none uppercase">
+              {t.habits.title}
+            </h1>
+            <p className="text-gray-400 dark:text-gray-500 mt-1 font-bold text-[10px] sm:text-sm uppercase tracking-widest">
+              {t.habits.subtitle}
+            </p>
+          </div>
+          
+          <div className="flex items-center gap-2 sm:gap-4">
              <button 
-               onClick={() => setViewMode('list')} 
-               className={`p-1.5 sm:p-2.5 rounded-xl transition-all ${viewMode === 'list' ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600' : 'text-gray-400'}`}
+               onClick={() => setIsTemplatesOpen(true)} 
+               className="p-2 sm:p-3 bg-white dark:bg-gray-800 text-primary-600 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm hover:shadow-md transition-all active:scale-95 group"
              >
-               <List size={18} strokeWidth={3} />
+               <Sparkles size={18} strokeWidth={3} className="group-hover:scale-110 transition-transform" />
              </button>
+             
              <button 
-               onClick={() => setViewMode('grid')} 
-               className={`p-1.5 sm:p-2.5 rounded-xl transition-all ${viewMode === 'grid' ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600' : 'text-gray-400'}`}
+               onClick={() => { setEditingHabit(null); setIsModalOpen(true); }} 
+               className="p-2 sm:p-3 bg-primary-600 hover:bg-primary-700 text-white rounded-2xl shadow-xl shadow-primary-600/20 transition-all active:scale-90"
              >
-               <Grid3X3 size={18} strokeWidth={3} />
+               <Plus size={18} strokeWidth={4} />
              </button>
-           </div>
-
-           <button 
-             onClick={() => setIsTemplatesOpen(true)} 
-             className="p-2 sm:p-3 bg-white dark:bg-gray-800 text-primary-600 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm hover:shadow-md transition-all active:scale-95 group"
-           >
-             <Sparkles size={18} strokeWidth={3} className="group-hover:scale-110 transition-transform" />
-           </button>
-           
-           <button 
-             onClick={() => { setEditingHabit(null); setIsModalOpen(true); }} 
-             className="p-2 sm:p-3 bg-primary-600 hover:bg-primary-700 text-white rounded-2xl shadow-xl shadow-primary-600/20 transition-all active:scale-90"
-           >
-             <Plus size={18} strokeWidth={4} />
-           </button>
+          </div>
         </div>
       </header>
-
-      {/* Category Management Row */}
-      <div className="flex items-center gap-2 py-1 border-t border-gray-100 dark:border-gray-800/50 pt-4">
-        <button 
-          onClick={() => setIsManagingCategories(!isManagingCategories)} 
-          className={`p-1.5 sm:p-2 rounded-xl shrink-0 transition-all border-2 ${isManagingCategories ? 'bg-primary-600 border-primary-600 text-white shadow-lg' : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 text-gray-400 shadow-sm'}`} 
-        >
-          <Settings size={14} strokeWidth={3} />
-        </button>
-        
-        <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar flex-1 items-center">
-          <button 
-            onClick={() => setSelectedCategory('All')} 
-            className={`whitespace-nowrap px-3 sm:px-4 py-1.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all border-2 ${selectedCategory === 'All' ? 'bg-primary-600 border-primary-600 text-white shadow-lg' : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 text-gray-400 hover:border-gray-300'}`}
-          >
-            {t.common.all}
-          </button>
-          
-          {categories.map(cat => (
-            <div key={cat} className="relative group shrink-0">
-              <button 
-                onClick={() => setSelectedCategory(cat)} 
-                className={`whitespace-nowrap px-3 sm:px-4 py-1.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all border-2 ${selectedCategory === cat ? 'bg-primary-600 border-primary-600 text-white shadow-lg' : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 text-gray-400 hover:border-gray-300'} ${isManagingCategories ? 'pr-7' : ''}`}
-              >
-                {cat}
-              </button>
-              {isManagingCategories && (
-                <button 
-                  onClick={(e) => { e.stopPropagation(); requestDeleteCategory(cat); }} 
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 bg-red-100 dark:bg-red-900/40 text-red-600 rounded-full transition-all hover:scale-110 z-10"
-                >
-                  <X size={10} strokeWidth={3} />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
 
       {/* Main List/Grid View */}
       <div className="min-h-[300px]">
@@ -201,9 +138,21 @@ const Habits: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3 sm:gap-4">
                   {filteredHabits.map(habit => (
                     <div key={habit.id} onClick={() => handleEdit(habit)} className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-lg transition-all cursor-pointer group">
-                      <div className="flex items-center gap-3 mb-3">
-                        <span className="text-2xl bg-gray-50 dark:bg-gray-900 p-2 rounded-2xl border border-gray-100 dark:border-gray-700">{habit.icon}</span>
-                        <h3 className="font-black text-gray-900 dark:text-white uppercase tracking-tighter truncate text-sm">{habit.name}</h3>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                           <span className="text-2xl bg-gray-50 dark:bg-gray-900 p-2 rounded-2xl border border-gray-100 dark:border-gray-700">{habit.icon}</span>
+                           <div>
+                              <h3 className="font-black text-gray-900 dark:text-white uppercase tracking-tighter truncate text-sm">{habit.name}</h3>
+                              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{habit.category}</p>
+                           </div>
+                        </div>
+                        <button
+                           onClick={(e) => { e.stopPropagation(); toggleHabit(habit.id); }}
+                           className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${habit.completedDates.includes(todayKey) ? `bg-${habit.color}-500 text-white shadow-md` : 'bg-gray-100 dark:bg-gray-700 text-gray-300'}`}
+                        >
+                           <Plus size={16} strokeWidth={4} className={habit.completedDates.includes(todayKey) ? 'hidden' : ''} />
+                           {habit.completedDates.includes(todayKey) && <div className="w-2 h-2 bg-white rounded-full" />}
+                        </button>
                       </div>
                       <HabitGrid completedDates={habit.completedDates} color={habit.color} size="sm" daysToShow={35} />
                     </div>

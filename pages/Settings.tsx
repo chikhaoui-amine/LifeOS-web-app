@@ -3,7 +3,7 @@ import React, { useState, useMemo, useRef } from 'react';
 import { 
   Bell, Trash2, Plus, Download, Upload, Palette, Check, 
   ChevronDown, ChevronUp, Globe, Cloud, Calendar, Moon, 
-  Shield, Cpu, Sparkles, Sun, Edit2, Zap, AlertTriangle, Loader2, WifiOff, Terminal
+  Shield, Cpu, Sparkles, Sun, Edit2, Zap, AlertTriangle, Loader2, WifiOff, Terminal, Eye, EyeOff, LayoutGrid, X
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../context/SettingsContext';
@@ -58,6 +58,20 @@ const LANGUAGE_OPTIONS: { label: string; value: LanguageCode }[] = [
   { label: 'Français (French)', value: 'fr' },
 ];
 
+const TOGGLEABLE_MODULES = [
+  { id: 'vision', label: 'Vision Board' },
+  { id: 'habits', label: 'Habits' },
+  { id: 'tasks', label: 'Tasks' },
+  { id: 'goals', label: 'Goals' },
+  { id: 'calendar', label: 'Calendar' },
+  { id: 'meals', label: 'Meal Planner' },
+  { id: 'sleep', label: 'Sleep Tracker' },
+  { id: 'journal', label: 'Journal' },
+  { id: 'finance', label: 'Finance' },
+  { id: 'deen', label: 'Islamic Features' },
+  { id: 'statistics', label: 'Statistics' },
+];
+
 const Settings: React.FC = () => {
   const navigate = useNavigate();
   const { showToast } = useToast();
@@ -79,6 +93,7 @@ const Settings: React.FC = () => {
   const t = useMemo(() => getTranslation((settings?.preferences?.language || 'en') as LanguageCode), [settings?.preferences?.language]);
   const [modalConfig, setModalConfig] = useState<any>({ isOpen: false });
   const [showThemes, setShowThemes] = useState(false);
+  const [isModulesModalOpen, setIsModulesModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const allThemes = [...PREBUILT_THEMES, ...savedThemes];
@@ -160,6 +175,30 @@ const Settings: React.FC = () => {
     });
   };
 
+  const toggleModule = (id: string) => {
+    const currentDisabled = settings.disabledModules || [];
+    const isCurrentlyDisabled = currentDisabled.includes(id);
+    
+    let newDisabled;
+    if (isCurrentlyDisabled) {
+      newDisabled = currentDisabled.filter(m => m !== id);
+    } else {
+      newDisabled = [...currentDisabled, id];
+    }
+    
+    // Sync 'deen' with Islamic Features toggle in Preferences
+    if (id === 'deen') {
+        updateSettings({ 
+            disabledModules: newDisabled,
+            preferences: { ...settings.preferences, enableIslamicFeatures: isCurrentlyDisabled }
+        });
+    } else {
+        updateSettings({ disabledModules: newDisabled });
+    }
+    
+    showToast(`${isCurrentlyDisabled ? 'Enabled' : 'Disabled'} ${id} tab`, 'info');
+  };
+
   return (
     <div className="w-full pb-32 animate-in fade-in duration-500 px-4 sm:px-6">
       
@@ -212,12 +251,32 @@ const Settings: React.FC = () => {
               </div>
 
               <SettingItem 
+                  label="Configure Tabs"
+                  subLabel="Hide modules you don't need"
+                  icon={LayoutGrid}
+                  type="link"
+                  onClick={() => setIsModulesModalOpen(true)}
+              />
+
+              <SettingItem 
                   label={t.settings.islamicFeatures}
                   subLabel="Enable prayers, Quran tracking, and Hijri calendar"
                   icon={Moon}
                   type="toggle"
                   value={settings?.preferences?.enableIslamicFeatures}
-                  onChange={(val) => updateSettings({ preferences: { ...settings?.preferences, enableIslamicFeatures: val } })}
+                  onChange={(val) => {
+                      const currentDisabled = settings.disabledModules || [];
+                      let newDisabled;
+                      if (val) {
+                          newDisabled = currentDisabled.filter(m => m !== 'deen');
+                      } else {
+                          newDisabled = [...currentDisabled.filter(m => m !== 'deen'), 'deen'];
+                      }
+                      updateSettings({ 
+                        preferences: { ...settings?.preferences, enableIslamicFeatures: val },
+                        disabledModules: newDisabled
+                      });
+                  }}
               />
             </SettingSection>
 
@@ -297,76 +356,6 @@ const Settings: React.FC = () => {
             {/* Cloud */}
             <GoogleBackupManager />
 
-            {/* Notifications */}
-            <div className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-4">
-                      <div className="p-3 bg-rose-50 dark:bg-rose-900/20 text-rose-500 rounded-2xl">
-                        <Bell size={24} />
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-lg text-gray-900 dark:text-white">{t.settings.notifications}</h3>
-                        <p className="text-xs text-gray-500 font-medium">Daily alerts & reminders</p>
-                      </div>
-                  </div>
-                  <button 
-                    onClick={() => updateSettings({ notifications: { ...settings?.notifications, enabled: !settings?.notifications?.enabled } })}
-                    className={`w-12 h-7 rounded-full relative transition-colors duration-300 focus:outline-none ${settings?.notifications?.enabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-gray-700'}`}
-                  >
-                      <span className={`absolute top-1 left-1 bg-white w-5 h-5 rounded-full shadow-sm transition-transform duration-300 ${settings?.notifications?.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
-                  </button>
-                </div>
-
-                {settings?.notifications?.enabled && (
-                  <div className="space-y-6 animate-in fade-in slide-in-from-top-1 duration-300">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800">
-                            <div className="flex items-center gap-2 mb-3 text-amber-500">
-                              <Sun size={16} />
-                              <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Morning</span>
-                            </div>
-                            <input 
-                              type="time" 
-                              value={settings?.notifications?.morningTime || '08:00'} 
-                              onChange={(e) => updateSettings({ morningTime: e.target.value })}
-                              className="w-full bg-transparent text-2xl font-bold text-gray-900 dark:text-white outline-none"
-                            />
-                        </div>
-                        <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800">
-                            <div className="flex items-center gap-2 mb-3 text-indigo-500">
-                              <Moon size={16} />
-                              <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Evening</span>
-                            </div>
-                            <input 
-                              type="time" 
-                              value={settings?.notifications?.eveningTime || '20:00'} 
-                              onChange={(e) => updateSettings({ eveningTime: e.target.value })}
-                              className="w-full bg-transparent text-2xl font-bold text-gray-900 dark:text-white outline-none"
-                            />
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 block">Subscriptions</label>
-                        <div className="flex flex-wrap gap-2">
-                            {['habits', 'tasks', 'dailySummary'].map(category => {
-                              const isActive = settings.notifications[category as keyof typeof settings.notifications];
-                              return (
-                                  <button
-                                    key={category}
-                                    onClick={() => updateSettings({ notifications: { ...settings.notifications, [category]: !isActive } })}
-                                    className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wide border-2 transition-all ${isActive ? 'bg-primary-600 border-primary-600 text-white shadow-md' : 'bg-transparent border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'}`}
-                                  >
-                                    {category.replace(/([A-Z])/g, ' $1').trim()}
-                                  </button>
-                              );
-                            })}
-                        </div>
-                      </div>
-                  </div>
-                )}
-            </div>
-
             {/* Data Management */}
             <SettingSection title="Data & Privacy">
               <SettingItem label={t.settings.backup} subLabel="Export to JSON (Mobile: Share File)" icon={Download} onClick={handleBackupData} />
@@ -388,6 +377,52 @@ const Settings: React.FC = () => {
         </div>
 
       </div>
+
+      {/* Module Visibility Modal */}
+      {isModulesModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+           <div className="bg-white dark:bg-gray-800 rounded-[2rem] w-full max-w-md shadow-2xl border border-gray-100 dark:border-gray-700 overflow-hidden flex flex-col max-h-[85vh]">
+              <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/20">
+                 <div className="flex items-center gap-3">
+                    <div className="p-2 bg-primary-100 dark:bg-primary-900/30 text-primary-600 rounded-lg">
+                       <LayoutGrid size={20} />
+                    </div>
+                    <h3 className="font-bold text-lg text-gray-900 dark:text-white">Navigation Tabs</h3>
+                 </div>
+                 <button onClick={() => setIsModulesModalOpen(false)} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                    <X size={20} />
+                 </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 space-y-1 custom-scrollbar">
+                 {TOGGLEABLE_MODULES.map(module => {
+                   const isDisabled = settings.disabledModules?.includes(module.id);
+                   return (
+                     <button 
+                       key={module.id}
+                       onClick={() => toggleModule(module.id)}
+                       className="w-full flex items-center justify-between p-4 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors group"
+                     >
+                        <div className="flex items-center gap-4">
+                           <div className={`p-2 rounded-lg transition-colors ${isDisabled ? 'bg-gray-100 text-gray-400 dark:bg-gray-700' : 'bg-primary-50 text-primary-600 dark:bg-primary-900/20 dark:text-primary-400'}`}>
+                              {isDisabled ? <EyeOff size={18} /> : <Eye size={18} />}
+                           </div>
+                           <span className={`font-bold text-sm ${isDisabled ? 'text-gray-400' : 'text-gray-700 dark:text-gray-200'}`}>{module.label}</span>
+                        </div>
+                        <div className={`w-10 h-6 rounded-full relative transition-colors duration-200 ease-in-out ${!isDisabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-gray-600'}`}>
+                          <span className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full shadow transition-transform duration-200 ${!isDisabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                        </div>
+                     </button>
+                   );
+                 })}
+              </div>
+
+              <div className="p-6 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/20">
+                 <p className="text-xs text-gray-400 text-center font-medium italic">Changes are saved automatically and applied instantly to the top navigation bar.</p>
+              </div>
+           </div>
+        </div>
+      )}
 
       <ConfirmationModal 
         isOpen={modalConfig.isOpen} 

@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Plus, Search, Filter, BookOpen, LayoutGrid, List, Sparkles, TrendingUp, Heart } from 'lucide-react';
+import { Plus, Search, Filter, BookOpen, LayoutGrid, List, Sparkles, TrendingUp, Heart, Image as ImageIcon, Calendar } from 'lucide-react';
 import { useJournal } from '../context/JournalContext';
 import { useSettings } from '../context/SettingsContext';
 import { getTranslation } from '../utils/translations';
@@ -8,6 +8,7 @@ import { JournalEntryCard } from '../components/journal/JournalEntryCard';
 import { JournalForm } from '../components/journal/JournalForm';
 import { JournalStats } from '../components/journal/JournalStats';
 import { PinModal } from '../components/journal/PinModal';
+import { JournalCalendar } from '../components/journal/JournalCalendar';
 import { EmptyState } from '../components/EmptyState';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
 import { JournalEntry, LanguageCode } from '../types';
@@ -17,15 +18,13 @@ const Journal: React.FC = () => {
   const { settings } = useSettings();
   const t = useMemo(() => getTranslation((settings?.preferences?.language || 'en') as LanguageCode), [settings?.preferences?.language]);
   
-  const [viewMode, setViewMode] = useState<'timeline' | 'stats'>('timeline');
+  const [viewMode, setViewMode] = useState<'timeline' | 'stats' | 'calendar'>('timeline');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTag, setFilterTag] = useState(t.common.all);
 
   const [pinModalState, setPinModalState] = useState<{ isOpen: boolean; entry: JournalEntry | null }>({ isOpen: false, entry: null });
-
-  const allTags = [t.common.all, ...Array.from(new Set(entries.flatMap(e => e.tags)))];
 
   const filteredEntries = useMemo(() => {
     return entries.filter(e => {
@@ -75,61 +74,74 @@ const Journal: React.FC = () => {
   }, [entries]);
 
   return (
-    <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-500 pb-20">
+    <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-500 pb-20 px-1">
       
-      {/* Immersive Header - Themed */}
-      <header className="relative p-5 sm:p-12 rounded-[2rem] sm:rounded-[2.5rem] bg-primary-600 text-white overflow-hidden shadow-2xl">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/4 pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-40 h-40 bg-black/10 rounded-full blur-[60px] translate-y-1/3 -translate-x-1/4 pointer-events-none" />
+      {/* Immersive Premium Header */}
+      <header 
+        className="relative p-8 sm:p-12 rounded-[2.5rem] sm:rounded-[3rem] bg-primary-600 text-white overflow-hidden transition-all duration-700 group"
+        style={{
+          background: `linear-gradient(135deg, var(--color-primary-600) 0%, rgba(var(--color-primary-rgb), 0.7) 100%)`,
+          boxShadow: `0 25px 60px -15px rgba(var(--color-primary-rgb), 0.4), inset 0 2px 20px rgba(255,255,255,0.15)`
+        }}
+      >
+        <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(255,255,255,0.05)_50%,transparent_75%)] bg-[length:250%_250%] animate-[shimmer_12s_infinite_linear] pointer-events-none" />
+        <div className="absolute -top-20 -right-20 w-96 h-96 bg-white/10 rounded-full blur-[110px] pointer-events-none mix-blend-soft-light group-hover:scale-110 transition-transform duration-1000" />
+        <div className="absolute -bottom-10 -left-10 w-72 h-72 bg-black/20 rounded-full blur-[90px] pointer-events-none opacity-60" />
         
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6 sm:gap-8">
-          <div className="space-y-3 sm:space-y-4">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full border border-white/10 text-[10px] font-bold uppercase tracking-widest text-white/80">
-               <Sparkles size={12} /> {settings?.preferences?.language === 'ar' ? 'مركز التأمل' : 'Reflection Hub'}
+          <div className="space-y-4">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/15 backdrop-blur-xl border border-white/20 rounded-full text-[10px] font-black uppercase tracking-[0.2em] text-white shadow-lg">
+               <Sparkles size={12} className="animate-pulse" /> {settings?.preferences?.language === 'ar' ? 'مركز التأمل' : 'Reflection Sanctuary'}
             </div>
-            <h1 className="text-2xl sm:text-5xl font-black font-serif tracking-tight">{t.journal.title}</h1>
-            <p className="text-white/70 max-w-md text-sm sm:text-lg font-serif italic">{t.journal.subtitle}</p>
+            <h1 className="text-3xl sm:text-6xl font-black font-serif tracking-tighter drop-shadow-xl leading-none">{t.journal.title}</h1>
+            <p className="text-white/80 max-w-md text-sm sm:text-xl font-serif italic leading-relaxed">{t.journal.subtitle}</p>
             
-            <div className="flex gap-4 pt-2">
+            <div className="flex gap-6 pt-4">
                <div className="flex flex-col">
-                  <span className="text-xl sm:text-2xl font-bold">{entries.length}</span>
-                  <span className="text-[9px] font-black uppercase text-white/50 tracking-widest">{t.journal.entries}</span>
+                  <span className="text-2xl sm:text-3xl font-black tracking-tight">{entries.length}</span>
+                  <span className="text-[10px] font-black uppercase text-white/50 tracking-[0.2em]">{t.journal.entries}</span>
                </div>
-               <div className="w-px h-8 bg-white/10" />
-               <div className="flex flex-col text-orange-300">
-                  <span className="text-xl sm:text-2xl font-bold flex items-center gap-1.5">
-                     <TrendingUp size={18} /> {streak}
+               <div className="w-px h-10 bg-white/10" />
+               <div className="flex flex-col text-orange-200">
+                  <span className="text-2xl sm:text-3xl font-black tracking-tight flex items-center gap-2">
+                     <TrendingUp size={22} className="drop-shadow-[0_0_8px_rgba(253,224,71,0.5)]" /> {streak}
                   </span>
-                  <span className="text-[9px] font-black uppercase tracking-widest opacity-70">{t.journal.dayStreak}</span>
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-60">{t.journal.dayStreak}</span>
                </div>
             </div>
           </div>
 
           <button 
             onClick={() => { setSelectedEntry(null); setIsFormOpen(true); }}
-            className="group shrink-0 bg-white hover:bg-gray-100 text-primary-600 px-6 py-3 sm:px-8 sm:py-4 rounded-2xl flex items-center gap-3 font-black text-sm sm:text-lg shadow-xl shadow-white/5 transition-all active:scale-95"
+            className="group shrink-0 bg-white hover:bg-gray-100 text-primary-600 px-8 py-4 sm:px-10 sm:py-5 rounded-[2rem] flex items-center gap-4 font-black text-sm sm:text-lg shadow-2xl shadow-black/10 transition-all active:scale-95 active:rotate-1 border-b-4 border-gray-200"
           >
-            <Plus size={20} sm-size={24} strokeWidth={3} className="group-hover:rotate-90 transition-transform duration-300" />
-            <span>{t.journal.newEntry}</span>
+            <Plus size={24} strokeWidth={4} className="group-hover:rotate-180 transition-transform duration-500" />
+            <span className="uppercase tracking-widest">{t.journal.newEntry}</span>
           </button>
         </div>
       </header>
 
       {/* Navigation and Content Controls */}
       <div className="sticky top-0 z-20 py-2 -mx-2 px-2 md:mx-0 md:px-0">
-         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-800 p-2 rounded-2xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div className="flex bg-white dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 p-1 rounded-xl self-start overflow-x-auto no-scrollbar max-w-full">
+         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-2 rounded-2xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800 p-1 rounded-xl self-start overflow-x-auto no-scrollbar max-w-full">
                <button 
                   onClick={() => setViewMode('timeline')} 
-                  className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap ${viewMode === 'timeline' ? 'bg-primary-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                  className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-black uppercase tracking-wider transition-all flex items-center gap-2 whitespace-nowrap ${viewMode === 'timeline' ? 'bg-white dark:bg-gray-700 text-primary-600 dark:text-primary-400 shadow-sm border border-gray-100 dark:border-gray-600' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}`}
                >
-                  <List size={16} strokeWidth={2.5} /> {t.journal.timeline}
+                  <List size={16} strokeWidth={3} /> {t.journal.timeline}
+               </button>
+               <button 
+                  onClick={() => setViewMode('calendar')} 
+                  className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-black uppercase tracking-wider transition-all flex items-center gap-2 whitespace-nowrap ${viewMode === 'calendar' ? 'bg-white dark:bg-gray-700 text-primary-600 dark:text-primary-400 shadow-sm border border-gray-100 dark:border-gray-600' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}`}
+               >
+                  <Calendar size={16} strokeWidth={3} /> {t.journal.calendar}
                </button>
                <button 
                   onClick={() => setViewMode('stats')} 
-                  className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap ${viewMode === 'stats' ? 'bg-primary-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                  className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-black uppercase tracking-wider transition-all flex items-center gap-2 whitespace-nowrap ${viewMode === 'stats' ? 'bg-white dark:bg-gray-700 text-primary-600 dark:text-primary-400 shadow-sm border border-gray-100 dark:border-gray-600' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}`}
                >
-                  <LayoutGrid size={16} strokeWidth={2.5} /> {t.journal.insights}
+                  <LayoutGrid size={16} strokeWidth={3} /> {t.journal.insights}
                </button>
             </div>
 
@@ -142,20 +154,8 @@ const Journal: React.FC = () => {
                        placeholder={t.journal.search} 
                        value={searchQuery}
                        onChange={(e) => setSearchQuery(e.target.value)}
-                       className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 outline-none focus:ring-2 focus:ring-primary-500/20 text-xs sm:text-sm font-medium text-gray-900 dark:text-white"
+                       className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 outline-none focus:ring-2 focus:ring-primary-500/20 text-xs sm:text-sm font-bold text-gray-900 dark:text-white"
                      />
-                  </div>
-                  <div className="h-8 w-px bg-gray-200 dark:bg-gray-800 hidden md:block" />
-                  <div className="flex gap-2 overflow-x-auto no-scrollbar max-w-[140px] md:max-w-none">
-                     {allTags.slice(0, 3).map(tag => (
-                        <button
-                          key={tag}
-                          onClick={() => setFilterTag(tag)}
-                          className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all border ${filterTag === tag ? 'bg-primary-600 border-primary-600 text-white shadow-md' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-500 hover:bg-gray-50'}`}
-                        >
-                           {tag}
-                        </button>
-                     ))}
                   </div>
                </div>
             )}
@@ -189,6 +189,14 @@ const Journal: React.FC = () => {
                     ))}
                  </div>
                )
+            )}
+
+            {viewMode === 'calendar' && (
+               <JournalCalendar 
+                  entries={entries} 
+                  onDateSelect={() => {}} 
+                  onEntryClick={handleEntryClick} 
+               />
             )}
 
             {viewMode === 'stats' && <JournalStats />}

@@ -86,7 +86,6 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
     
     // Comprehensive CSS overrides for hardcoded Tailwind classes
-    // This is necessary because we can't configure tailwind.config.js with the CDN build.
     styleTag.innerHTML = `
       :root { --color-primary-rgb: ${primaryRgb}; }
       body {
@@ -106,6 +105,12 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         background-color: rgba(var(--color-text-rgb), 0.05) !important;
       }
 
+      /* Navigation Header Blend Fix - Use Background Color instead of White/Surface */
+      header {
+        background-color: rgba(var(--color-bg-rgb), 0.8) !important;
+        border-bottom: 1px solid rgba(var(--color-text-rgb), 0.08) !important;
+      }
+
       /* Specific Opacity Overrides */
       .dark .dark\\:bg-gray-900\\/80, .dark .dark\\:bg-gray-800\\/80 { background-color: rgba(var(--color-surface-rgb), 0.8) !important; }
       .dark .dark\\:bg-gray-900\\/50, .dark .dark\\:bg-gray-800\\/50 { background-color: rgba(var(--color-surface-rgb), 0.5) !important; }
@@ -116,8 +121,18 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       .text-gray-900, .dark .dark\\:text-white, .dark .dark\\:text-gray-50, .dark .dark\\:text-gray-100, .dark .dark\\:text-gray-200, .dark .dark\\:text-slate-100 {
         color: rgb(var(--color-text-rgb) / var(--tw-text-opacity, 1)) !important;
       }
-      .text-gray-500, .text-gray-600, .text-gray-700, .dark .dark\\:text-gray-300, .dark .dark\\:text-gray-400, .dark .dark\\:text-gray-500, .dark .dark\\:text-slate-400 {
-        color: rgb(var(--color-text-muted-rgb) / var(--tw-text-opacity, 1)) !important;
+      
+      /* KILL THE GRAYS: Force neutral grays in light themes to use the theme's actual text color with opacity */
+      .text-gray-400, .text-gray-500, .text-gray-600, .text-gray-700, .dark .dark\\:text-gray-300, .dark .dark\\:text-gray-400, .dark .dark\\:text-gray-500, .dark .dark\\:text-slate-400 {
+        color: rgba(var(--color-text-rgb), 0.5) !important;
+      }
+
+      /* Special fix for inactive navigation labels to match themed aesthetic */
+      header a span, header a svg {
+        color: rgba(var(--color-text-rgb), 0.4) !important;
+      }
+      header a.active-nav-item span, header a.active-nav-item svg {
+        color: white !important;
       }
 
       /* --- BORDERS --- */
