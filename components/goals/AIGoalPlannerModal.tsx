@@ -1,9 +1,8 @@
 
-import React, { useState } from 'react';
 import { GoogleGenAI, Type } from "@google/genai";
-import { X, Sparkles, BrainCircuit, Loader2, AlertCircle, ArrowRight, Lightbulb } from 'lucide-react';
-import { Goal, GoalType } from '../../types';
-import { getApiKey } from '../../utils/env';
+import React, { useState } from 'react';
+import { X, Sparkles, BrainCircuit, Loader2, AlertCircle, Lightbulb } from 'lucide-react';
+import { Goal } from '../../types';
 import { useSettings } from '../../context/SettingsContext';
 
 interface AIGoalPlannerModalProps {
@@ -11,106 +10,61 @@ interface AIGoalPlannerModalProps {
   onClose: () => void;
 }
 
-const CATEGORIES = [
-  'Career & Business', 'Financial & Wealth', 'Health & Fitness', 
-  'Relationships & Family', 'Personal Development', 'Education & Learning', 
-  'Spiritual & Faith', 'Adventure & Travel', 'Creativity & Hobbies', 'Contribution & Legacy'
-];
-
-const COLORS = ['indigo', 'blue', 'green', 'amber', 'red', 'purple', 'pink'];
-
-const LANG_MAP: Record<string, string> = {
-  en: 'English',
-  ar: 'Arabic',
-  es: 'Spanish',
-  fr: 'French'
-};
-
 export const AIGoalPlannerModal: React.FC<AIGoalPlannerModalProps> = ({ onGoalGenerated, onClose }) => {
-  const { settings } = useSettings();
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState('');
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
-    
     setIsGenerating(true);
     setError('');
 
-    const apiKey = getApiKey();
-    if (!apiKey) {
-      setError("System Error: API Key not found. Please check Settings > Vercel Variables.");
-      setIsGenerating(false);
-      return;
-    }
-
     try {
-      const ai = new GoogleGenAI({ apiKey });
-      const appLang = LANG_MAP[settings.preferences.language] || 'English';
-      
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `I want to achieve this: "${prompt}". Please help me turn this into a SMART goal.`,
+        contents: `Create a SMART goal for: "${prompt}".`,
         config: {
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
             properties: {
-              title: { type: Type.STRING, description: "A concise, motivating title for the goal" },
-              description: { type: Type.STRING, description: "A detailed breakdown of the goal" },
-              motivation: { type: Type.STRING, description: "The 'Why' behind this goal to keep the user inspired" },
-              category: { type: Type.STRING, enum: CATEGORIES },
-              type: { type: Type.STRING, enum: ["milestone", "numeric", "habit"] },
-              targetValue: { type: Type.NUMBER, description: "The target numerical value (e.g. 100 for percentage or milestones, or a specific count)" },
-              unit: { type: Type.STRING, description: "Unit of measurement if numeric (e.g. 'kg', 'pages', 'hours')" },
+              title: { type: Type.STRING },
+              description: { type: Type.STRING },
+              motivation: { type: Type.STRING },
+              category: { type: Type.STRING },
               priority: { type: Type.STRING, enum: ["low", "medium", "high"] },
-              color: { type: Type.STRING, enum: COLORS },
+              targetValue: { type: Type.NUMBER },
+              unit: { type: Type.STRING },
               milestones: {
                 type: Type.ARRAY,
                 items: {
                   type: Type.OBJECT,
-                  properties: {
-                    title: { type: Type.STRING, description: "A specific action step" },
-                    completed: { type: Type.BOOLEAN }
-                  },
-                  required: ["title", "completed"]
+                  properties: { title: { type: Type.STRING }, completed: { type: Type.BOOLEAN } }
                 }
               }
-            },
-            required: ["title", "description", "motivation", "category", "type", "milestones", "priority", "color"],
+            }
           },
-          systemInstruction: `You are a world-class life coach.
-          1. Detect the language of the user's prompt ("${prompt}").
-          2. Output the content fields (title, description, motivation, milestones) IN THAT SAME LANGUAGE.
-          3. If the prompt language is ambiguous or neutral, default to ${appLang}.
-          4. Ensure 'category', 'type', 'priority', and 'color' strictly follow the ENUM values in the schema (keep them in English as they are system keys).
-          5. Provide clear, actionable milestones.`,
+          systemInstruction: "You are an elite life coach. Convert user dreams into structured goals with actionable milestones in JSON format."
         },
       });
 
       const goalData = JSON.parse(response.text || '{}');
-      
-      // Ensure milestones have unique IDs for the UI
       const processedGoal = {
         ...goalData,
-        milestones: goalData.milestones?.map((m: any) => ({
-          ...m,
-          id: Math.random().toString(36).substr(2, 9),
-          completed: false
-        })) || []
+        id: Math.random().toString(36).substr(2, 9),
+        color: 'indigo',
+        type: 'milestone',
+        currentValue: 0,
+        milestones: goalData.milestones?.map((m: any) => ({ ...m, id: Math.random().toString(36).substr(2, 7) })) || []
       };
 
       onGoalGenerated(processedGoal);
       onClose();
-
-    } catch (err: any) {
-      console.error("AI Goal Planning Error:", err);
-      let msg = "The coach is busy right now. Please try again.";
-      if (err.message.includes('403') || err.message.includes('API key')) {
-         msg = "API Key Invalid. Check Settings.";
-      }
-      setError(msg);
+    } catch (err) {
+      console.error(err);
+      setError("The coach is currently offline. Please check your connection.");
     } finally {
       setIsGenerating(false);
     }
@@ -119,76 +73,20 @@ export const AIGoalPlannerModal: React.FC<AIGoalPlannerModalProps> = ({ onGoalGe
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div className="bg-white dark:bg-gray-800 rounded-3xl w-full max-w-lg shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col">
-        
-        {/* Header */}
-        <div className="bg-gradient-to-r from-violet-600 to-indigo-600 p-6 text-white relative overflow-hidden">
-           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-           <div className="flex justify-between items-start relative z-10">
-              <div className="flex items-center gap-3">
-                 <div className="bg-white/20 p-2 rounded-xl backdrop-blur-md">
-                    <BrainCircuit size={24} className="text-white" />
-                 </div>
-                 <div>
-                    <h2 className="text-xl font-bold">AI Goal Planner</h2>
-                    <p className="text-indigo-100 text-xs font-medium">Powered by Gemini AI</p>
-                 </div>
-              </div>
-              <button onClick={onClose} className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors">
-                 <X size={18} />
-              </button>
+        <div className="bg-gradient-to-r from-violet-600 to-indigo-600 p-6 text-white">
+           <div className="flex justify-between items-start">
+              <div className="flex items-center gap-3"><BrainCircuit size={24} /><div><h2 className="text-xl font-bold">AI Goal Planner</h2><p className="text-indigo-100 text-xs">Powered by Gemini</p></div></div>
+              <button onClick={onClose} className="p-2"><X size={18} /></button>
            </div>
         </div>
-
-        {/* Content */}
         <div className="p-6 space-y-6">
-           <div className="space-y-4">
-              <div className="flex items-start gap-3 bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-800">
-                 <Lightbulb className="text-indigo-600 dark:text-indigo-400 shrink-0 mt-1" size={20} />
-                 <p className="text-sm text-indigo-900 dark:text-indigo-200 leading-relaxed">
-                    Describe a dream, a project, or a habit you want to start. I'll help you structure it perfectly.
-                 </p>
-              </div>
-
-              <textarea 
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="e.g., I want to run a marathon by next year, or I want to save money to buy a house in the suburbs..."
-                className="w-full h-36 p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 focus:ring-2 focus:ring-indigo-500 outline-none resize-none text-gray-900 dark:text-white transition-all text-sm"
-                autoFocus
-              />
-           </div>
-
-           {error && (
-             <div className="flex items-center gap-2 text-sm text-red-500 bg-red-50 dark:bg-red-900/10 p-3 rounded-xl">
-                <AlertCircle size={16} /> {error}
-             </div>
-           )}
-
-           <button 
-             onClick={handleGenerate}
-             disabled={isGenerating || !prompt.trim()}
-             className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-bold shadow-lg shadow-indigo-500/20 transition-all active:scale-95 flex items-center justify-center gap-2"
-           >
-              {isGenerating ? (
-                <>
-                  <Loader2 size={20} className="animate-spin" /> 
-                  <span>Designing your path...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles size={20} />
-                  <span>Generate SMART Goal</span>
-                </>
-              )}
+           <div className="flex items-start gap-3 bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-2xl text-sm"><Lightbulb className="text-indigo-600 shrink-0" size={20} /><p className="text-indigo-900 dark:text-indigo-200">Describe your dream, and I'll build the roadmap.</p></div>
+           <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="e.g. I want to save $5k for travel or learn to play piano..." className="w-full h-36 p-4 rounded-xl bg-gray-50 dark:bg-gray-700 border-none outline-none resize-none text-gray-900 dark:text-white" autoFocus />
+           {error && <div className="flex items-center gap-2 text-sm text-red-500 bg-red-50 p-3 rounded-xl"><AlertCircle size={16} /> {error}</div>}
+           <button onClick={handleGenerate} disabled={isGenerating || !prompt.trim()} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold flex items-center justify-center gap-2">
+              {isGenerating ? <><Loader2 size={20} className="animate-spin" /> Planning...</> : <><Sparkles size={20} /> Generate Plan</>}
            </button>
-
-           {!isGenerating && (
-             <p className="text-[10px] text-center text-gray-400 dark:text-gray-500 uppercase tracking-widest">
-               AI will suggest title, description, milestones and category
-             </p>
-           )}
         </div>
-
       </div>
     </div>
   );

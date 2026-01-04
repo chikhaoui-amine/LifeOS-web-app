@@ -1,116 +1,55 @@
 
-import React, { useState, useMemo } from 'react';
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+import React, { useState } from 'react';
 import { X, Sparkles, ChefHat, Loader2, AlertCircle } from 'lucide-react';
-import { Recipe, LanguageCode } from '../../types';
-import { getApiKey } from '../../utils/env';
-import { useSettings } from '../../context/SettingsContext';
+import { AIService } from '../../services/AIService';
+import { Recipe } from '../../types';
 
 interface AIChefModalProps {
   onRecipeGenerated: (recipe: Partial<Recipe>) => void;
   onClose: () => void;
 }
 
-const LANG_MAP: Record<string, string> = {
-  en: 'English',
-  ar: 'Arabic',
-  es: 'Spanish',
-  fr: 'French'
-};
-
 export const AIChefModal: React.FC<AIChefModalProps> = ({ onRecipeGenerated, onClose }) => {
-  const { settings } = useSettings();
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState('');
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
-    
     setIsGenerating(true);
     setError('');
 
-    const apiKey = getApiKey();
-    
-    if (!apiKey) {
-      setError("System Error: API Key not found. Please check Settings > Vercel Variables.");
-      setIsGenerating(false);
-      return;
-    }
-
     try {
-      const ai = new GoogleGenAI({ apiKey });
-      
-      const appLang = LANG_MAP[settings.preferences.language] || 'English';
-
-      const schema: Schema = {
-        type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING },
-          description: { type: Type.STRING },
-          prepTime: { type: Type.INTEGER, description: "Preparation time in minutes" },
-          cookTime: { type: Type.INTEGER, description: "Cooking time in minutes" },
-          servings: { type: Type.INTEGER },
-          calories: { type: Type.INTEGER },
-          difficulty: { type: Type.STRING, enum: ["easy", "medium", "hard"] },
-          cuisine: { type: Type.STRING },
-          ingredients: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                name: { type: Type.STRING },
-                amount: { type: Type.NUMBER },
-                unit: { type: Type.STRING },
-                category: { type: Type.STRING, description: "e.g., Produce, Dairy, Pantry" }
-              }
-            }
-          },
-          instructions: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING }
-          }
-        },
-        required: ["title", "ingredients", "instructions", "prepTime", "cookTime", "difficulty"],
-      };
-
-      const response = await ai.models.generateContent({
+      const response = await AIService.generateResponse({
         model: 'gemini-3-flash-preview',
-        contents: `Create a recipe based on this request: "${prompt}".`,
+        prompt: `Create a professional recipe in JSON format based on: "${prompt}".`,
         config: {
           responseMimeType: "application/json",
-          responseSchema: schema,
-          systemInstruction: `You are an expert home cook. 
-          1. Detect the language of the user's request ("${prompt}").
-          2. Generate the recipe content (Title, Description, Ingredients, Instructions) IN THAT SAME LANGUAGE.
-          3. If the request is language-neutral (e.g. just emojis or numbers), default to ${appLang}.
-          4. Ensure the JSON structure remains valid regardless of the language used for the values.
-          5. Values for 'difficulty' must remain in English ("easy", "medium", "hard").
-          6. Create recipes that are practical for everyday cooking.`,
-        },
+          systemInstruction: "You are a gourmet chef. Generate a delicious, easy-to-follow recipe in valid JSON format. Match the language of the prompt.",
+        }
       });
 
-      const recipeData = JSON.parse(response.text || '{}');
-      
-      // Add unique IDs to ingredients since the AI won't generate them
+      // Defensive parsing for the text output
+      let cleanJson = response.text || '';
+      if (cleanJson.includes('```')) {
+         cleanJson = cleanJson.replace(/```json|```/g, '').trim();
+      }
+
+      const recipeData = JSON.parse(cleanJson || '{}');
       const processedRecipe = {
         ...recipeData,
         ingredients: recipeData.ingredients?.map((ing: any) => ({
           ...ing,
-          id: Date.now().toString() + Math.random().toString(36).substr(2, 5)
+          id: Math.random().toString(36).substr(2, 9),
+          category: 'Other'
         })) || []
       };
 
       onRecipeGenerated(processedRecipe);
       onClose();
-
     } catch (err: any) {
-      console.error("AI Generation Error:", err);
-      let msg = "The chef is having trouble hearing you.";
-      if (err.message.includes('403') || err.message.includes('API key')) {
-         msg = "API Key Invalid. Check Settings.";
-      }
-      setError(msg);
+      console.error(err);
+      setError("AI Service busy or unreachable. Ensure backend is deployed.");
     } finally {
       setIsGenerating(false);
     }
@@ -119,62 +58,22 @@ export const AIChefModal: React.FC<AIChefModalProps> = ({ onRecipeGenerated, onC
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div className="bg-white dark:bg-gray-800 rounded-3xl w-full max-w-lg shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col">
-        
-        {/* Header */}
-        <div className="bg-gradient-to-r from-orange-500 to-red-600 p-6 text-white relative overflow-hidden">
-           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+        <div className="bg-gradient-to-r from-orange-500 to-red-600 p-6 text-white relative">
            <div className="flex justify-between items-start relative z-10">
               <div className="flex items-center gap-3">
-                 <div className="bg-white/20 p-2 rounded-xl backdrop-blur-md">
-                    <ChefHat size={24} className="text-white" />
-                 </div>
-                 <div>
-                    <h2 className="text-xl font-bold">AI Chef</h2>
-                    <p className="text-orange-100 text-xs font-medium">Powered by Gemini</p>
-                 </div>
+                 <div className="bg-white/20 p-2 rounded-xl backdrop-blur-md"><ChefHat size={24} /></div>
+                 <div><h2 className="text-xl font-bold">AI Chef</h2><p className="text-orange-100 text-xs font-medium">Server-side Intelligence</p></div>
               </div>
-              <button onClick={onClose} className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors">
-                 <X size={18} />
-              </button>
+              <button onClick={onClose} className="p-2 bg-white/10 hover:bg-white/20 rounded-full"><X size={18} /></button>
            </div>
         </div>
-
-        {/* Content */}
         <div className="p-6 space-y-6">
-           <div className="space-y-2">
-              <label className="text-sm font-bold text-gray-700 dark:text-gray-300">What would you like to cook?</label>
-              <textarea 
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="e.g., A simple pasta dish, quick chicken dinner, or classic chocolate cookies..."
-                className="w-full h-32 p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 focus:ring-2 focus:ring-orange-500 outline-none resize-none text-gray-900 dark:text-white transition-all"
-                autoFocus
-              />
-           </div>
-
-           {error && (
-             <div className="flex items-center gap-2 text-sm text-red-500 bg-red-50 dark:bg-red-900/10 p-3 rounded-xl">
-                <AlertCircle size={16} /> {error}
-             </div>
-           )}
-
-           <button 
-             onClick={handleGenerate}
-             disabled={isGenerating || !prompt.trim()}
-             className="w-full py-4 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-bold shadow-lg shadow-orange-500/20 transition-all active:scale-95 flex items-center justify-center gap-2"
-           >
-              {isGenerating ? (
-                <>
-                  <Loader2 size={20} className="animate-spin" /> Cooking up magic...
-                </>
-              ) : (
-                <>
-                  <Sparkles size={20} /> Generate Recipe
-                </>
-              )}
+           <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="e.g. A high-protein Mediterranean lunch under 20 mins..." className="w-full h-32 p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 focus:ring-2 focus:ring-orange-500 outline-none resize-none text-gray-900 dark:text-white" autoFocus />
+           {error && <div className="flex items-center gap-2 text-sm text-red-500 bg-red-50 dark:bg-red-900/10 p-3 rounded-xl"><AlertCircle size={16} /> {error}</div>}
+           <button onClick={handleGenerate} disabled={isGenerating || !prompt.trim()} className="w-full py-4 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 disabled:opacity-50">
+              {isGenerating ? <><Loader2 size={20} className="animate-spin" /> Cooking...</> : <><Sparkles size={20} /> Generate Recipe</>}
            </button>
         </div>
-
       </div>
     </div>
   );

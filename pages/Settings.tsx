@@ -29,8 +29,9 @@ import { useFinance } from '../context/FinanceContext';
 import { useMeals } from '../context/MealContext';
 import { useSleep } from '../context/SleepContext';
 import { useTimeBlocks } from '../context/TimeBlockContext';
-import { useDigitalWellness } from '../context/DigitalWellnessContext';
 import { useIslamic } from '../context/IslamicContext';
+import { useVisionBoard } from '../context/VisionBoardContext';
+import { useReports } from '../context/ReportContext';
 
 const ACCENT_COLORS = [
   { name: 'Indigo', value: '#6366f1' },
@@ -78,7 +79,7 @@ const Settings: React.FC = () => {
   const { settings, updateSettings } = useSettings();
   const { currentTheme, savedThemes, applyTheme, updateThemePrimaryColor, deleteCustomTheme } = useTheme();
   
-  // Data Contexts
+  // Data Contexts for Manual Export
   const { habits, categories: habitCategories } = useHabits();
   const { tasks } = useTasks();
   const { entries: journal } = useJournal();
@@ -87,8 +88,9 @@ const Settings: React.FC = () => {
   const { recipes, foods, mealPlans, shoppingList } = useMeals();
   const { logs: sleepLogs, settings: sleepSettings } = useSleep();
   const { timeBlocks } = useTimeBlocks();
-  const { blockedApps, settings: wellnessSettings, stats: wellnessStats } = useDigitalWellness();
   const { prayers, quran, adhkar, settings: islamicSettings } = useIslamic();
+  const { items: visionBoard } = useVisionBoard();
+  const { reports } = useReports();
   
   const t = useMemo(() => getTranslation((settings?.preferences?.language || 'en') as LanguageCode), [settings?.preferences?.language]);
   const [modalConfig, setModalConfig] = useState<any>({ isOpen: false });
@@ -101,16 +103,17 @@ const Settings: React.FC = () => {
   const handleBackupData = () => {
      const data = BackupService.createBackupData(habits, tasks, settings);
      
-     // Attach comprehensive data
+     // Attach comprehensive module data
      data.habitCategories = habitCategories;
      data.journal = journal;
      data.goals = goals;
+     data.visionBoard = visionBoard;
+     data.reports = reports;
      data.finance = { accounts, transactions, budgets, savingsGoals, currency };
      data.meals = { recipes, foods, mealPlans, shoppingList };
      data.sleepLogs = sleepLogs;
      data.sleepSettings = sleepSettings;
      data.timeBlocks = timeBlocks;
-     data.digitalWellness = { blockedApps, settings: wellnessSettings, stats: wellnessStats };
      data.prayers = prayers;
      data.quran = quran;
      data.adhkar = adhkar;
@@ -118,7 +121,7 @@ const Settings: React.FC = () => {
      data.customThemes = savedThemes;
 
      BackupService.downloadBackup(data);
-     showToast('Backup file generated', 'success');
+     showToast('Master backup file generated', 'success');
   };
 
   const handleRestoreClick = () => {
@@ -134,8 +137,8 @@ const Settings: React.FC = () => {
       
       setModalConfig({
         isOpen: true,
-        title: 'Restore Backup',
-        message: 'This will overwrite your current data with the backup file. The app will reload. Are you sure?',
+        title: 'Restore Master Backup',
+        message: 'This will overwrite ALL data (Vision, Finance, Habits, Tasks, etc.). The app will reload. Proceed?',
         type: 'danger',
         confirmText: 'Restore & Reload',
         onConfirm: async () => {
@@ -186,7 +189,6 @@ const Settings: React.FC = () => {
       newDisabled = [...currentDisabled, id];
     }
     
-    // Sync 'deen' with Islamic Features toggle in Preferences
     if (id === 'deen') {
         updateSettings({ 
             disabledModules: newDisabled,
@@ -207,15 +209,13 @@ const Settings: React.FC = () => {
           {t.nav.settings}
         </h1>
         <p className="text-lg text-gray-500 dark:text-gray-400 font-medium max-w-xl">
-          Personalize your experience and manage your data.
+          Personalize your experience and manage your master backup.
         </p>
       </header>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 sm:gap-8">
         
-        {/* Column 1 */}
         <div className="space-y-6 sm:space-y-8">
-            
             <SettingSection title={t.settings.preferences}>
               <SettingItem 
                 label={t.settings.language}
@@ -280,9 +280,8 @@ const Settings: React.FC = () => {
               />
             </SettingSection>
 
-            {/* Appearance */}
             <div>
-              <div className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+              <div className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
                 <button 
                   onClick={() => setShowThemes(!showThemes)}
                   className="w-full flex items-center justify-between p-6 hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-all text-left group"
@@ -302,19 +301,17 @@ const Settings: React.FC = () => {
                 {showThemes && (
                   <div className="p-6 border-t border-gray-100 dark:border-gray-800 animate-in slide-in-from-top-2 duration-300">
                       <div className="mb-8">
-                        <div className="flex items-center justify-between mb-4">
-                            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Accent Color</span>
-                        </div>
+                        <span className="text-xs font-bold text-gray-400 uppercase tracking-widest block mb-4">Accent Color</span>
                         <div className="flex flex-wrap gap-2">
                             {ACCENT_COLORS.map(color => (
                               <button
                                 key={color.value}
                                 onClick={() => updateThemePrimaryColor(color.value)}
-                                className="relative w-8 h-8 rounded-full flex items-center justify-center transition-transform hover:scale-110 active:scale-95 shadow-sm border border-white dark:border-gray-700"
+                                className="relative w-8 h-8 rounded-full flex items-center justify-center transition-transform hover:scale-110 shadow-sm border border-white dark:border-gray-700"
                                 style={{ backgroundColor: color.value }}
                               >
                                 {currentTheme.colors.primary.toLowerCase() === color.value.toLowerCase() && (
-                                  <Check size={14} className="text-white drop-shadow-md" strokeWidth={3} />
+                                  <Check size={14} className="text-white" strokeWidth={3} />
                                 )}
                               </button>
                             ))}
@@ -323,10 +320,7 @@ const Settings: React.FC = () => {
 
                       <div className="flex items-center justify-between mb-4">
                           <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Theme Library</span>
-                          <button 
-                            onClick={() => navigate('/settings/theme-creator')}
-                            className="text-xs font-bold text-primary-600 hover:text-primary-700 flex items-center gap-1"
-                          >
+                          <button onClick={() => navigate('/settings/theme-creator')} className="text-xs font-bold text-primary-600 flex items-center gap-1">
                               <Plus size={14} /> Create New
                           </button>
                       </div>
@@ -347,78 +341,54 @@ const Settings: React.FC = () => {
                 )}
               </div>
             </div>
-
         </div>
 
-        {/* Column 2 */}
         <div className="space-y-6 sm:space-y-8">
-            
-            {/* Cloud */}
             <GoogleBackupManager />
 
-            {/* Data Management */}
-            <SettingSection title="Data & Privacy">
-              <SettingItem label={t.settings.backup} subLabel="Export to JSON (Mobile: Share File)" icon={Download} onClick={handleBackupData} />
+            <SettingSection title="Master Data Management">
+              <SettingItem label="Full Local Export" subLabel="Export ALL app data to JSON" icon={Download} onClick={handleBackupData} />
               
-              <div onClick={handleRestoreClick} className="w-full px-5 py-4 flex items-center justify-between text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50 text-gray-900 dark:text-gray-100 cursor-pointer">
+              <div onClick={handleRestoreClick} className="w-full px-5 py-4 flex items-center justify-between text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50 text-gray-900 dark:text-gray-100 cursor-pointer border-b border-gray-100 dark:border-gray-800/50">
                  <div className="flex items-center gap-3.5">
                     <div className="p-2 bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 rounded-lg"><Upload size={18} /></div>
                     <div className="flex flex-col">
-                       <span className="font-medium text-sm sm:text-base">Restore Backup</span>
-                       <span className="text-xs text-gray-400 mt-0.5">Import from JSON file</span>
+                       <span className="font-medium text-sm sm:text-base">Restore Full Backup</span>
+                       <span className="text-xs text-gray-400 mt-0.5">Import and overwrite from JSON</span>
                     </div>
                  </div>
               </div>
               <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".json" className="hidden" />
 
-              <SettingItem label={t.settings.reset} subLabel="Erase local data" icon={Trash2} type="danger" onClick={handleResetApp} />
+              <SettingItem label={t.settings.reset} subLabel="Erase local device data" icon={Trash2} type="danger" onClick={handleResetApp} />
             </SettingSection>
-
         </div>
-
       </div>
 
-      {/* Module Visibility Modal */}
       {isModulesModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
            <div className="bg-white dark:bg-gray-800 rounded-[2rem] w-full max-w-md shadow-2xl border border-gray-100 dark:border-gray-700 overflow-hidden flex flex-col max-h-[85vh]">
               <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/20">
                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-primary-100 dark:bg-primary-900/30 text-primary-600 rounded-lg">
-                       <LayoutGrid size={20} />
-                    </div>
+                    <div className="p-2 bg-primary-100 dark:bg-primary-900/30 text-primary-600 rounded-lg"><LayoutGrid size={20} /></div>
                     <h3 className="font-bold text-lg text-gray-900 dark:text-white">Navigation Tabs</h3>
                  </div>
-                 <button onClick={() => setIsModulesModalOpen(false)} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                    <X size={20} />
-                 </button>
+                 <button onClick={() => setIsModulesModalOpen(false)} className="p-2 text-gray-400 hover:text-gray-600"><X size={20} /></button>
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 space-y-1 custom-scrollbar">
                  {TOGGLEABLE_MODULES.map(module => {
                    const isDisabled = settings.disabledModules?.includes(module.id);
                    return (
-                     <button 
-                       key={module.id}
-                       onClick={() => toggleModule(module.id)}
-                       className="w-full flex items-center justify-between p-4 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors group"
-                     >
+                     <button key={module.id} onClick={() => toggleModule(module.id)} className="w-full flex items-center justify-between p-4 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                         <div className="flex items-center gap-4">
-                           <div className={`p-2 rounded-lg transition-colors ${isDisabled ? 'bg-gray-100 text-gray-400 dark:bg-gray-700' : 'bg-primary-50 text-primary-600 dark:bg-primary-900/20 dark:text-primary-400'}`}>
-                              {isDisabled ? <EyeOff size={18} /> : <Eye size={18} />}
-                           </div>
+                           <div className={`p-2 rounded-lg ${isDisabled ? 'bg-gray-100 text-gray-400' : 'bg-primary-50 text-primary-600'}`}>{isDisabled ? <EyeOff size={18} /> : <Eye size={18} />}</div>
                            <span className={`font-bold text-sm ${isDisabled ? 'text-gray-400' : 'text-gray-700 dark:text-gray-200'}`}>{module.label}</span>
                         </div>
-                        <div className={`w-10 h-6 rounded-full relative transition-colors duration-200 ease-in-out ${!isDisabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-gray-600'}`}>
-                          <span className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full shadow transition-transform duration-200 ${!isDisabled ? 'translate-x-4' : 'translate-x-0'}`} />
-                        </div>
+                        <div className={`w-10 h-6 rounded-full relative transition-colors ${!isDisabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-gray-600'}`}><span className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full shadow transition-transform ${!isDisabled ? 'translate-x-4' : 'translate-x-0'}`} /></div>
                      </button>
                    );
                  })}
-              </div>
-
-              <div className="p-6 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/20">
-                 <p className="text-xs text-gray-400 text-center font-medium italic">Changes are saved automatically and applied instantly to the top navigation bar.</p>
               </div>
            </div>
         </div>

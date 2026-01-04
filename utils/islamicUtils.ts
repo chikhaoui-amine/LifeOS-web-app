@@ -24,22 +24,6 @@ export const SURAHS = [
   "Al-Masad", "Al-Ikhlas", "Al-Falaq", "An-Nas"
 ];
 
-// --- GEOLOCATION ---
-
-export const getUserLocation = (): Promise<{lat: number, lng: number}> => {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error('Geolocation not supported'));
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      (err) => reject(err),
-      { enableHighAccuracy: false, timeout: 10000 }
-    );
-  });
-};
-
 // --- HIJRI ENGINE (Tabular) ---
 
 const ISLAMIC_EPOCH = 1948439.5;

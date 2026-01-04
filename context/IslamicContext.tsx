@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { DailyPrayers, QuranProgress, IslamicSettings, AdhkarProgress } from '../types';
 import { storage } from '../utils/storage';
-import { getUserLocation, getPrayerTimes, getHijriDate, getQiblaDirection, getHijriKey } from '../utils/islamicUtils';
+import { getPrayerTimes, getHijriDate, getQiblaDirection, getHijriKey } from '../utils/islamicUtils';
 
 interface IslamicContextType {
   settings: IslamicSettings;
@@ -72,14 +72,6 @@ export const IslamicProvider: React.FC<{ children: ReactNode }> = ({ children })
       
       if (storedSettings) {
         setSettings(storedSettings);
-      } else {
-        // Try getting location on first load
-        try {
-          const loc = await getUserLocation();
-          setSettings(prev => ({ ...prev, location: loc }));
-        } catch (e) {
-          console.log('Location access denied, using default');
-        }
       }
       setLoading(false);
     };
@@ -211,6 +203,6 @@ export const IslamicProvider: React.FC<{ children: ReactNode }> = ({ children })
 
 export const useIslamic = () => {
   const context = useContext(IslamicContext);
-  if (context === undefined) throw new Error('useIslamic must be used within an IslamicProvider');
+  if (context === undefined) throw new Error('useIslamic must be used within a IslamicProvider');
   return context;
 };

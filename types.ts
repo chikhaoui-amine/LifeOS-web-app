@@ -10,7 +10,7 @@ export interface NavRoute {
 
 export type LanguageCode = 'en' | 'ar' | 'es' | 'fr';
 
-export type FrequencyType = 'daily' | 'weekly';
+export type FrequencyType = 'daily' | 'weekly' | 'once';
 export type HabitType = 'boolean' | 'counter' | 'timer';
 
 export interface Habit {
@@ -28,10 +28,11 @@ export interface Habit {
     type: FrequencyType;
     days: number[];
   };
-  reminders: string[];
-  completedDates: string[];
+  completedDates: string[]; // List of dates where goal was met
+  progress: Record<string, number>; // New: Detailed progress per date
   archived: boolean;
   createdAt: string;
+  reminders: string[];
 }
 
 export interface Subtask {
@@ -226,39 +227,6 @@ export interface SleepSettings {
   bedTimeGoal: string; // HH:mm
   wakeTimeGoal: string; // HH:mm
   windDownMinutes: number;
-}
-
-// --- DIGITAL WELLNESS SYSTEM ---
-
-export type BlockMode = 'focus' | 'sleep' | 'work' | 'detox' | 'none';
-
-export interface BlockedApp {
-  id: string;
-  name: string;
-  url: string; // For web blocker
-  icon?: string;
-  category: 'social' | 'entertainment' | 'news' | 'shopping' | 'other';
-  isBlocked: boolean;
-  dailyLimitMinutes?: number;
-}
-
-export interface WellnessSession {
-  id: string;
-  type: BlockMode;
-  startTime: string;
-  endTime?: string;
-  durationMinutes: number;
-  strictMode: boolean;
-  notes?: string;
-  completed: boolean;
-}
-
-export interface WellnessSettings {
-  strictMode: boolean;
-  strictModeEndTime?: string;
-  password?: string;
-  accountabilityPartner?: string; // email
-  emergencyUnlockUsed: boolean;
 }
 
 // --- GOALS SYSTEM ---
@@ -460,6 +428,33 @@ export interface WeeklyReport {
   content: WeeklyReportContent;
 }
 
+// --- DIGITAL WELLNESS SYSTEM ---
+
+/**
+ * Fix: Added missing export for BlockMode
+ */
+export type BlockMode = 'none' | 'focus';
+
+/**
+ * Fix: Added missing export for BlockedApp
+ */
+export interface BlockedApp {
+  id: string;
+  name: string;
+  url: string;
+  category: string;
+  isBlocked: boolean;
+}
+
+/**
+ * Fix: Added missing export for WellnessSettings
+ */
+export interface WellnessSettings {
+  strictMode: boolean;
+  strictModeEndTime?: string;
+  emergencyUnlockUsed: boolean;
+}
+
 export interface AppSettings {
   notifications: {
     enabled: boolean;
@@ -491,40 +486,35 @@ export interface BackupData {
   version: string;
   appVersion: string;
   exportDate: string;
+  settings: AppSettings;
   habits: Habit[];
-  habitCategories?: string[]; // Added
+  habitCategories?: string[];
   tasks: Task[];
   goals?: Goal[];
   journal?: JournalEntry[];
-  visionBoard?: VisionItem[]; // Added
+  visionBoard?: VisionItem[];
   prayers?: DailyPrayers[];
   quran?: QuranProgress;
   adhkar?: AdhkarProgress[];
-  islamicSettings?: IslamicSettings; // Added
+  islamicSettings?: IslamicSettings;
   finance?: {
     accounts: Account[];
     transactions: Transaction[];
     budgets: Budget[];
     savingsGoals: SavingsGoal[];
-    currency: string; // Added
+    currency: string;
   };
   meals?: {
     recipes: Recipe[];
-    foods: Food[]; // Added
+    foods: Food[];
     mealPlans: MealPlanDay[];
     shoppingList: ShoppingListItem[];
   };
   sleepLogs?: SleepLog[];
-  sleepSettings?: SleepSettings; // Added
-  digitalWellness?: {
-    blockedApps: BlockedApp[];
-    settings: WellnessSettings;
-    stats?: any; // Added
-  };
+  sleepSettings?: SleepSettings;
   timeBlocks?: TimeBlock[];
-  reports?: WeeklyReport[]; // Added
-  settings: AppSettings;
-  customThemes?: Theme[]; // Added
+  reports?: WeeklyReport[];
+  customThemes?: Theme[];
 }
 
 export type NotificationType = 'habit' | 'task' | 'summary' | 'achievement' | 'streak';

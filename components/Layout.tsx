@@ -26,7 +26,6 @@ import { useSync } from '../context/SyncContext';
 import { useHabits } from '../context/HabitContext';
 import { useTasks } from '../context/TaskContext';
 import { getTranslation } from '../utils/translations';
-import { AIAssistant } from './AIAssistant';
 
 export const Layout: React.FC = () => {
   const location = useLocation();
@@ -179,9 +178,6 @@ export const Layout: React.FC = () => {
           <Outlet />
         </div>
       </main>
-
-      {/* AI Assistant Persistent Layer */}
-      <AIAssistant />
     </div>
   );
 };

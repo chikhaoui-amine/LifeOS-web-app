@@ -1,6 +1,15 @@
 
 import { initializeApp, getApps } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged, User } from "firebase/auth";
+import { 
+  getAuth, 
+  GoogleAuthProvider, 
+  signInWithPopup, 
+  signInWithRedirect, 
+  getRedirectResult,
+  signOut as firebaseSignOut, 
+  onAuthStateChanged, 
+  User 
+} from "firebase/auth";
 import { getFirestore, doc, setDoc, onSnapshot, enableIndexedDbPersistence } from "firebase/firestore";
 import { getAnalytics } from "firebase/analytics";
 import { BackupData } from '../types';
@@ -30,7 +39,6 @@ const getFirebaseConfig = () => {
 
 const firebaseConfig = getFirebaseConfig();
 
-// Initialize App dynamically
 let app: any;
 let auth: any;
 let db: any;
@@ -45,7 +53,6 @@ const initializeFirebase = () => {
   } else {
     try {
       app = initializeApp(firebaseConfig);
-      // Initialize analytics if supported
       if (typeof window !== 'undefined') {
           try {
               analytics = getAnalytics(app);
@@ -63,17 +70,17 @@ const initializeFirebase = () => {
       auth = getAuth(app);
       db = getFirestore(app);
       provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
 
-      // Enable offline persistence (Web)
       enableIndexedDbPersistence(db).catch((err) => {
           if (err.code == 'failed-precondition') {
-              console.log('Multiple tabs open, persistence can only be enabled in one tab at a a time.');
+              console.log('Persistence already active in another tab.');
           } else if (err.code == 'unimplemented') {
-              console.log('The current browser does not support all of the features required to enable persistence');
+              console.log('The current browser does not support persistence features.');
           }
       });
     } catch(e) {
-      console.warn("Firebase services init failed (persistence or other)", e);
+      console.warn("Firebase services init failed", e);
     }
   }
 };
@@ -85,16 +92,8 @@ export const FirebaseService = {
   db,
   currentUser: null as User | null,
 
-  /**
-   * Check if configured
-   */
-  isConfigured: (): boolean => {
-    return !!auth;
-  },
+  isConfigured: (): boolean => !!auth,
 
-  /**
-   * Save custom configuration
-   */
   saveConfiguration: (config: any) => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('lifeos_firebase_config', JSON.stringify(config));
@@ -102,35 +101,44 @@ export const FirebaseService = {
     }
   },
 
-  /**
-   * Initialize and listen for auth changes
-   */
   init: (onUserChange: (user: User | null) => void) => {
     if (!auth) return () => {};
     
+    // APK/Mobile Readiness: Check for redirect results on app load
+    getRedirectResult(auth).catch((error) => {
+      console.error("Firebase Redirect Result Error:", error);
+    });
+
     return onAuthStateChanged(auth, (user: User | null) => {
       FirebaseService.currentUser = user;
       onUserChange(user);
     });
   },
 
-  /**
-   * Sign in with Google Popup
-   */
-  signIn: async (): Promise<User> => {
+  signIn: async (): Promise<User | void> => {
     if (!auth) throw new Error("Firebase not configured");
+    
+    // Detect environment: Check if running inside a native shell (Capacitor/APK)
+    const isNative = typeof window !== 'undefined' && 
+      (window.location.protocol === 'file:' || 
+       (window as any).Capacitor || 
+       /Android|iPhone|iPad/i.test(navigator.userAgent));
+    
     try {
-      const result = await signInWithPopup(auth, provider);
-      return result.user;
+      if (isNative) {
+        // Popups are blocked in Android WebViews. Use Redirect instead.
+        await signInWithRedirect(auth, provider);
+        return; 
+      } else {
+        const result = await signInWithPopup(auth, provider);
+        return result.user;
+      }
     } catch (error) {
       console.error("Firebase Sign In Error:", error);
       throw error;
     }
   },
 
-  /**
-   * Sign Out
-   */
   signOut: async (): Promise<void> => {
     if (!auth) return;
     try {
@@ -141,10 +149,6 @@ export const FirebaseService = {
     }
   },
 
-  /**
-   * Save Data to Firestore (Auto Backup)
-   * Path: users/{uid}
-   */
   saveUserData: async (data: BackupData): Promise<void> => {
     if (!auth || !auth.currentUser) return;
 
@@ -155,31 +159,23 @@ export const FirebaseService = {
         lastUpdated: new Date().toISOString(),
         device: navigator.userAgent
       }, { merge: true });
-      console.log("Data synced to Cloud Firestore");
     } catch (error) {
       console.error("Error saving data:", error);
       throw error;
     }
   },
 
-  /**
-   * Subscribe to Data Changes (Real-time Sync)
-   */
   subscribeToUserData: (onDataReceived: (data: BackupData) => void) => {
     if (!auth || !auth.currentUser) return () => {};
 
     const userRef = doc(db, "users", auth.currentUser.uid);
     
     const unsubscribe = onSnapshot(userRef, (docSnap) => {
-      // metadata.hasPendingWrites is true if the event is from a local write.
-      if (docSnap.metadata.hasPendingWrites) {
-        return;
-      }
+      if (docSnap.metadata.hasPendingWrites) return;
 
       if (docSnap.exists()) {
         const content = docSnap.data();
         if (content && content.backupData) {
-          console.log("Received update from cloud");
           onDataReceived(content.backupData as BackupData);
         }
       }

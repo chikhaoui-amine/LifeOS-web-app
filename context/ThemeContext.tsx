@@ -122,12 +122,10 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         color: rgb(var(--color-text-rgb) / var(--tw-text-opacity, 1)) !important;
       }
       
-      /* KILL THE GRAYS: Force neutral grays in light themes to use the theme's actual text color with opacity */
       .text-gray-400, .text-gray-500, .text-gray-600, .text-gray-700, .dark .dark\\:text-gray-300, .dark .dark\\:text-gray-400, .dark .dark\\:text-gray-500, .dark .dark\\:text-slate-400 {
         color: rgba(var(--color-text-rgb), 0.5) !important;
       }
 
-      /* Special fix for inactive navigation labels to match themed aesthetic */
       header a span, header a svg {
         color: rgba(var(--color-text-rgb), 0.4) !important;
       }
@@ -146,6 +144,10 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       .border-primary-600, .border-primary-500 { border-color: rgb(var(--color-primary-rgb) / var(--tw-border-opacity, 1)) !important; }
       .bg-primary-50, .dark .dark\\:bg-primary-900\\/20, .dark .dark\\:bg-primary-900\\/30 { background-color: rgba(var(--color-primary-rgb), 0.1) !important; }
       
+      /* --- STROKE (SVG) Support --- */
+      .stroke-primary-600, .stroke-primary-500, .stroke-indigo-500 { stroke: rgb(var(--color-primary-rgb)) !important; }
+      .stroke-gray-100, .stroke-gray-200, .dark .dark\\:stroke-gray-800, .dark .dark\\:stroke-gray-700 { stroke: rgb(var(--color-border-rgb)) !important; }
+
       /* --- RADIUS --- */
       .rounded-xl, .rounded-2xl, .rounded-3xl, .rounded-\\[2rem\\], .rounded-\\[2\\.5rem\\] {
         border-radius: var(--radius-base) !important;

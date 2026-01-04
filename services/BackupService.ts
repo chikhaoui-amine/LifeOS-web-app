@@ -11,8 +11,8 @@ export const BackupService = {
 
   createBackupData: (habits: Habit[], tasks: Task[], settings: AppSettings): BackupData => {
     return {
-      version: "1.2.0",
-      appVersion: "1.2.0",
+      version: "1.3.0",
+      appVersion: "1.3.0",
       exportDate: new Date().toISOString(),
       habits,
       tasks,
@@ -23,17 +23,16 @@ export const BackupService = {
   downloadBackup: async (data: BackupData) => {
     const jsonString = JSON.stringify(data, null, 2);
     const dateStr = new Date().toISOString().split('T')[0];
-    const fileName = `LifeOS_Backup_${dateStr}.json`;
+    const fileName = `LifeOS_FullBackup_${dateStr}.json`;
 
-    // 1. Try Native Share (Mobile friendly)
     if (navigator.share && navigator.canShare) {
       try {
         const file = new File([jsonString], fileName, { type: 'application/json' });
         if (navigator.canShare({ files: [file] })) {
           await navigator.share({
             files: [file],
-            title: 'LifeOS Backup',
-            text: `Backup created on ${dateStr}`
+            title: 'LifeOS Full Backup',
+            text: `Comprehensive LifeOS backup created on ${dateStr}`
           });
           return;
         }
@@ -42,7 +41,6 @@ export const BackupService = {
       }
     }
 
-    // 2. Fallback: Standard Browser Download
     const blob = new Blob([jsonString], { type: 'application/json' });
     const href = URL.createObjectURL(blob);
     
@@ -91,18 +89,24 @@ export const BackupService = {
 
   performReplace: async (data: BackupData) => {
     try {
+        console.log("Starting atomic restore for all modules...");
+        
         // 1. Core Modules
+        await storage.save('lifeos_settings_v1', data.settings);
         await storage.save('lifeos_habits_v2', data.habits || []);
         await storage.save('lifeos_tasks_v2', data.tasks || []);
-        await storage.save('lifeos_settings_v1', data.settings);
         
-        // Save categories if present, otherwise ignore (context will use default)
         if (data.habitCategories) await storage.save('lifeos_habit_categories_v1', data.habitCategories);
 
-        // 2. Extended Modules
+        // 2. Journal & Goals
         if (data.journal) await storage.save('lifeos_journal_v1', data.journal);
         if (data.goals) await storage.save('lifeos_goals_v1', data.goals);
         
+        // 3. Vision & Reports
+        if (data.visionBoard) await storage.save('lifeos_vision_board_v1', data.visionBoard);
+        if (data.reports) await storage.save('lifeos_weekly_reports_v1', data.reports);
+
+        // 4. Finance
         if (data.finance) {
           await storage.save('lifeos_finance_accounts_v1', data.finance.accounts || []);
           await storage.save('lifeos_finance_transactions_v1', data.finance.transactions || []);
@@ -111,6 +115,7 @@ export const BackupService = {
           if (data.finance.currency) await storage.save('lifeos_finance_currency_v1', data.finance.currency);
         }
         
+        // 5. Meals
         if (data.meals) {
           await storage.save('lifeos_recipes_v1', data.meals.recipes || []);
           await storage.save('lifeos_foods_v1', data.meals.foods || []);
@@ -118,26 +123,22 @@ export const BackupService = {
           await storage.save('lifeos_shopping_list_v1', data.meals.shoppingList || []);
         }
         
+        // 6. Sleep
         if (data.sleepLogs) await storage.save('lifeos_sleep_logs_v1', data.sleepLogs);
         if (data.sleepSettings) await storage.save('lifeos_sleep_settings_v1', data.sleepSettings);
         
-        if (data.digitalWellness) {
-          await storage.save('lifeos_wellness_apps_v1', data.digitalWellness.blockedApps || []);
-          await storage.save('lifeos_wellness_settings_v1', data.digitalWellness.settings);
-          if (data.digitalWellness.stats) await storage.save('lifeos_wellness_stats_v1', data.digitalWellness.stats);
-        }
-        
         if (data.timeBlocks) await storage.save('lifeos_time_blocks_v1', data.timeBlocks);
         
-        // Deen
+        // 7. Deen
         if (data.prayers) await storage.save('lifeos_islamic_data_v2', data.prayers);
         if (data.quran) await storage.save('lifeos_quran_v2', data.quran);
         if (data.adhkar) await storage.save('lifeos_adhkar_v1', data.adhkar);
         if (data.islamicSettings) await storage.save('lifeos_islamic_settings_v1', data.islamicSettings);
         
-        // Themes
+        // 8. Themes
         if (data.customThemes) await storage.save('lifeos_custom_themes', data.customThemes);
         
+        console.log("Restore successful.");
         return true;
     } catch (e) {
         console.error("Restore failed", e);
@@ -145,47 +146,10 @@ export const BackupService = {
     }
   },
 
-  performMerge: async (data: BackupData, currentHabits: Habit[], currentTasks: Task[]) => {
-    // Merge logic for core items only, extended items complicated to merge safely
-    const newHabits = [...currentHabits];
-    let habitsAdded = 0;
-    if (data.habits) {
-        data.habits.forEach(h => {
-          if (!newHabits.find(curr => curr.id === h.id)) {
-            newHabits.push(h);
-            habitsAdded++;
-          }
-        });
-    }
-
-    const newTasks = [...currentTasks];
-    let tasksAdded = 0;
-    if (data.tasks) {
-        data.tasks.forEach(t => {
-          if (!newTasks.find(curr => curr.id === t.id)) {
-            newTasks.push(t);
-            tasksAdded++;
-          }
-        });
-    }
-
-    await storage.save('lifeos_habits_v2', newHabits);
-    await storage.save('lifeos_tasks_v2', newTasks);
-    
-    return { habitsAdded, tasksAdded };
-  },
-
-  // Called by Auto-Backup in SettingsContext
   saveAutoSnapshot: async (snapshot: BackupData) => {
     const history = await storage.load<BackupData[]>(AUTO_BACKUP_KEY) || [];
     const newHistory = [snapshot, ...history].slice(0, MAX_AUTO_BACKUPS);
     await storage.save(AUTO_BACKUP_KEY, newHistory);
-  },
-
-  // Legacy method kept for compatibility, prefer saveAutoSnapshot with full data
-  createAutoSnapshot: async (habits: Habit[], tasks: Task[], settings: AppSettings) => {
-    const snapshot = BackupService.createBackupData(habits, tasks, settings);
-    await BackupService.saveAutoSnapshot(snapshot);
   },
 
   getAutoSnapshots: async (): Promise<BackupData[]> => {

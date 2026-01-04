@@ -1,8 +1,7 @@
-
 import React, { useState, useMemo } from 'react';
 import { 
   CalendarDays, ChefHat, ShoppingBasket, Plus, Sparkles, 
-  Droplets, Clock, UtensilsCrossed, Edit2, Minus, Apple, Search, BarChart2
+  UtensilsCrossed, Apple, Search
 } from 'lucide-react';
 import { useMeals } from '../context/MealContext';
 import { useSettings } from '../context/SettingsContext';
@@ -15,10 +14,8 @@ import { RecipeDetail } from '../components/meals/RecipeDetail';
 import { RecipeForm } from '../components/meals/RecipeForm';
 import { FoodForm } from '../components/meals/FoodForm';
 import { AIChefModal } from '../components/meals/AIChefModal';
-import { WaterGoalModal } from '../components/meals/WaterGoalModal';
 import { MealChoiceModal } from '../components/meals/MealChoiceModal';
 import { ConfirmationModal } from '../components/ConfirmationModal';
-import { LineChart } from '../components/Charts';
 import { Recipe, Food, MealType, LanguageCode } from '../types';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
 import { getTodayKey } from '../utils/dateUtils';
@@ -27,7 +24,6 @@ const Meals: React.FC = () => {
   const { 
     recipes, 
     foods,
-    mealPlans,
     loading, 
     toggleFavoriteRecipe, 
     toggleFavoriteFood,
@@ -38,11 +34,9 @@ const Meals: React.FC = () => {
     addRecipe,
     addFood,
     updateFood,
-    trackWater,
-    getMealPlanForDate
   } = useMeals();
   
-  const { settings, updateSettings } = useSettings();
+  const { settings } = useSettings();
   const t = useMemo(() => getTranslation((settings?.preferences?.language || 'en') as LanguageCode), [settings?.preferences?.language]);
   
   const [viewMode, setViewMode] = useState<'plan' | 'recipes' | 'foods' | 'shop'>('plan');
@@ -54,7 +48,6 @@ const Meals: React.FC = () => {
   const [isRecipeFormOpen, setIsRecipeFormOpen] = useState(false);
   const [isFoodFormOpen, setIsFoodFormOpen] = useState(false);
   const [isAIChefOpen, setIsAIChefOpen] = useState(false);
-  const [isWaterModalOpen, setIsWaterModalOpen] = useState(false);
   const [isChoiceModalOpen, setIsChoiceModalOpen] = useState<{ date: string, type: MealType } | null>(null);
   const [aiGeneratedData, setAiGeneratedData] = useState<Partial<Recipe> | null>(null);
   const [isSelectingForPlan, setIsSelectingForPlan] = useState<{ date: string, type: MealType } | null>(null);
@@ -70,9 +63,6 @@ const Meals: React.FC = () => {
     onConfirm: () => void;
   }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
-  const activePlan = useMemo(() => getMealPlanForDate(activeDate), [activeDate, mealPlans, getMealPlanForDate]);
-  const waterGoal = settings.meals?.waterGoal || 8;
-
   const filteredRecipes = useMemo(() => 
     recipes.filter(r => r.title.toLowerCase().includes(searchQuery.toLowerCase())), 
   [recipes, searchQuery]);
@@ -80,47 +70,6 @@ const Meals: React.FC = () => {
   const filteredFoods = useMemo(() => 
     foods.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase())), 
   [foods, searchQuery]);
-
-  // --- Chart Logic: Weekly View (Sun-Sat) ---
-  const chartStartDate = useMemo(() => {
-      const parts = activeDate.split('-').map(Number);
-      // Create date at local midnight
-      const current = new Date(parts[0], parts[1] - 1, parts[2]);
-      
-      const day = current.getDay(); // 0 (Sun) - 6 (Sat)
-      const diff = current.getDate() - day; // Adjust to Sunday
-      return new Date(current.setDate(diff));
-  }, [activeDate]);
-
-  const hydrationData = useMemo(() => {
-    return Array.from({ length: 7 }).map((_, i) => {
-        const d = new Date(chartStartDate);
-        d.setDate(d.getDate() + i);
-        const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        const dayPlan = getMealPlanForDate(dateKey);
-        return dayPlan.waterIntake;
-    });
-  }, [chartStartDate, getMealPlanForDate, mealPlans]); // Added mealPlans dependency to auto-update
-
-  const hydrationLabels = useMemo(() => {
-    return Array.from({ length: 7 }).map((_, i) => {
-        const d = new Date(chartStartDate);
-        d.setDate(d.getDate() + i);
-        return d.toLocaleDateString(settings?.preferences?.language || 'en', { weekday: 'short' });
-    });
-  }, [chartStartDate, settings?.preferences?.language]);
-
-  const selectedIndex = useMemo(() => {
-      const parts = activeDate.split('-').map(Number);
-      const selected = new Date(parts[0], parts[1] - 1, parts[2]);
-      return selected.getDay(); // 0 (Sun) - 6 (Sat)
-  }, [activeDate]);
-
-  const handleChartSelect = (index: number) => {
-      const d = new Date(chartStartDate);
-      d.setDate(d.getDate() + index);
-      setActiveDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
-  };
 
   if (loading) return <LoadingSkeleton count={3} />;
 
@@ -192,19 +141,6 @@ const Meals: React.FC = () => {
      setViewMode('shop');
   };
 
-  const handleSaveWater = (newIntake: number, newGoal: number) => {
-    const diff = newIntake - activePlan.waterIntake;
-    trackWater(activeDate, diff);
-    updateSettings({ meals: { ...settings.meals, waterGoal: newGoal } });
-  };
-
-  // Convert glasses to liters (approx 250ml per glass)
-  const liters = (activePlan.waterIntake * 0.25).toFixed(2);
-  const progressPercent = Math.min(100, (activePlan.waterIntake / waterGoal) * 100);
-
-  // Styling for cards
-  const cardClass = "bg-white dark:bg-gray-800 rounded-[2rem] sm:rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden";
-
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-500 pb-20">
       
@@ -248,78 +184,6 @@ const Meals: React.FC = () => {
 
       {viewMode === 'plan' && (
          <div className="space-y-6 sm:space-y-8">
-            <section className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 items-stretch">
-               
-               {/* Hydration Interactive Card */}
-               <div className={`${cardClass} p-5 sm:p-8 flex flex-col gap-4 sm:gap-6 justify-between h-full`}>
-                  <div className="flex items-center justify-between">
-                     <div className="flex items-center gap-3 sm:gap-4">
-                        <div className="p-2 sm:p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-2xl">
-                           <Droplets size={24} sm-size={28} className="animate-pulse" />
-                        </div>
-                        <div>
-                           <h4 className="text-sm sm:text-base font-black text-gray-900 dark:text-white uppercase tracking-wider">Hydration</h4>
-                           <p className="text-[10px] sm:text-xs text-gray-400 font-bold uppercase tracking-widest">
-                              {liters} Liters • Goal: {waterGoal}
-                           </p>
-                        </div>
-                     </div>
-                     <button 
-                        onClick={() => setIsWaterModalOpen(true)}
-                        className="p-2 sm:p-3 bg-gray-50 dark:bg-gray-700/50 text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-all"
-                        title="Edit Manually"
-                     >
-                        <Edit2 size={16} sm-size={18} />
-                     </button>
-                  </div>
-
-                  <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-900/50 p-2 sm:p-3 rounded-[2rem] sm:rounded-[2.5rem] border border-gray-100 dark:border-gray-700 relative overflow-hidden">
-                     <div className="absolute left-0 top-0 bottom-0 bg-blue-500/10 transition-all duration-700" style={{ width: `${progressPercent}%` }} />
-                     
-                     <button 
-                        onClick={() => trackWater(activeDate, -1)}
-                        className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-white dark:bg-gray-800 text-gray-400 hover:text-red-500 shadow-sm flex items-center justify-center transition-all active:scale-90 z-10"
-                     >
-                        <Minus size={20} sm-size={24} strokeWidth={3} />
-                     </button>
-                     
-                     <div className="text-center z-10">
-                        <span className="text-4xl sm:text-5xl font-black text-gray-900 dark:text-white leading-none tabular-nums">{activePlan.waterIntake}</span>
-                        <span className="text-[10px] sm:text-xs font-black text-gray-400 uppercase tracking-tighter block mt-1">Glasses</span>
-                     </div>
-
-                     <button 
-                        onClick={() => trackWater(activeDate, 1)}
-                        className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-blue-600 text-white shadow-lg shadow-blue-500/30 flex items-center justify-center transition-all hover:scale-110 active:scale-90 z-10"
-                     >
-                        <Plus size={20} sm-size={24} strokeWidth={3} />
-                     </button>
-                  </div>
-               </div>
-
-               {/* Hydration Trends Chart */}
-               <div className={`${cardClass} p-6 flex flex-col h-full bg-[image:radial-gradient(rgba(0,0,0,0.03)_1px,transparent_1px)] dark:bg-[image:radial-gradient(rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:16px_16px]`}>
-                  <div className="flex items-center justify-between mb-6">
-                     <div className="flex flex-col">
-                        <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2 text-sm sm:text-base">
-                           <BarChart2 size={18} sm-size={20} className="text-blue-500" /> Hydration Trends
-                        </h3>
-                        <p className="text-[10px] sm:text-xs text-gray-400 mt-0.5">Weekly Overview</p>
-                     </div>
-                  </div>
-                  <LineChart 
-                    data={hydrationData} 
-                    labels={hydrationLabels}
-                    goalValue={waterGoal}
-                    color="#3b82f6"
-                    height={160}
-                    onSelect={handleChartSelect}
-                    selectedIndex={selectedIndex}
-                  />
-               </div>
-            </section>
-
-            {/* Sync Button & Grid */}
             <div className="space-y-4">
                <div className="flex justify-between items-end px-2">
                   <h3 className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-tight">Weekly Schedule</h3>
@@ -382,7 +246,7 @@ const Meals: React.FC = () => {
 
                      <button 
                        onClick={() => setIsAIChefOpen(true)}
-                       className="bg-gradient-to-br from-orange-50/50 to-red-50/50 dark:from-orange-900/10 dark:to-red-900/10 border-2 border-dashed border-orange-200 dark:border-orange-800/50 rounded-[2rem] sm:rounded-[2.5rem] flex flex-col items-center justify-center min-h-[280px] sm:min-h-[360px] text-gray-400 hover:text-orange-600 hover:border-orange-400 hover:bg-orange-100/30 dark:hover:bg-orange-900/20 transition-all group"
+                       className="bg-gradient-to-br from-orange-500/20 via-red-500/20 to-pink-500/20 dark:from-orange-900/10 dark:to-red-900/10 border-2 border-dashed border-orange-200 dark:border-orange-800/50 rounded-[2rem] sm:rounded-[2.5rem] flex flex-col items-center justify-center min-h-[280px] sm:min-h-[360px] text-gray-400 hover:text-orange-600 hover:border-orange-400 hover:bg-orange-100/30 dark:hover:bg-orange-900/20 transition-all group"
                      >
                         <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white dark:bg-gray-800 rounded-3xl flex items-center justify-center mb-4 sm:mb-6 shadow-md border border-orange-100 dark:border-orange-900 group-hover:scale-110 transition-transform">
                            <Sparkles size={32} sm-size={40} className="text-orange-400 group-hover:text-orange-600" />
@@ -451,15 +315,6 @@ const Meals: React.FC = () => {
         <AIChefModal 
           onRecipeGenerated={(data) => { setAiGeneratedData(data); setIsAIChefOpen(false); setIsRecipeFormOpen(true); }}
           onClose={() => setIsAIChefOpen(false)}
-        />
-      )}
-
-      {isWaterModalOpen && (
-        <WaterGoalModal 
-          currentIntake={activePlan.waterIntake}
-          currentGoal={waterGoal}
-          onSave={handleSaveWater}
-          onClose={() => setIsWaterModalOpen(false)}
         />
       )}
 

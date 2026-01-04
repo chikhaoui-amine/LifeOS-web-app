@@ -73,12 +73,6 @@ const Today: React.FC = () => {
       });
   }, [tasks, todayKey]);
 
-  const { topPriorityTasks, upNextTasks } = useMemo(() => {
-    const topPriorityTasks = todaysTasks.filter(t => t.priority === 'high');
-    const upNextTasks = todaysTasks.filter(t => t.priority !== 'high');
-    return { topPriorityTasks, upNextTasks };
-  }, [todaysTasks]);
-
   // Finance Widget Data
   const dailySpend = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
@@ -92,9 +86,9 @@ const Today: React.FC = () => {
   const completedHabits = todaysHabits.filter(h => h.completedDates.includes(todayKey)).length;
   const habitProgress = totalHabits > 0 ? (completedHabits / totalHabits) * 100 : 0;
 
-  const totalTasks = tasks.filter(t => t.dueDate === todayKey).length;
-  const completedTasks = tasks.filter(t => t.dueDate === todayKey && t.completed).length;
-  const taskProgress = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
+  const totalTasksToday = tasks.filter(t => t.dueDate === todayKey).length;
+  const completedTasksToday = tasks.filter(t => t.dueDate === todayKey && t.completed).length;
+  const taskProgress = totalTasksToday > 0 ? (completedTasksToday / totalTasksToday) * 100 : 0;
 
   const handleHabitSave = async (data: any) => {
     await addHabit(data);
@@ -168,7 +162,7 @@ const Today: React.FC = () => {
               {/* Quick Stats with subtle glow bars */}
               <div className="bg-white/10 backdrop-blur-xl rounded-[1.5rem] p-4 border border-white/20 hover:bg-white/20 transition-all duration-300 group/stat hover:-translate-y-1 shadow-lg">
                  <p className="text-[10px] uppercase font-black text-primary-100 mb-2 tracking-widest opacity-80">Tasks Done</p>
-                 <div className="text-2xl font-black tracking-tighter">{completedTasks}<span className="text-sm opacity-50 ml-1">/{totalTasks}</span></div>
+                 <div className="text-2xl font-black tracking-tighter">{completedTasksToday}<span className="text-sm opacity-50 ml-1">/{totalTasksToday}</span></div>
                  <div className="h-1.5 bg-white/20 rounded-full mt-3 overflow-hidden shadow-inner">
                     <div className="h-full bg-white transition-all duration-1000 shadow-[0_0_10px_white]" style={{width: `${taskProgress}%`}} />
                  </div>
@@ -188,22 +182,22 @@ const Today: React.FC = () => {
            </div>
         </div>
 
-        {/* 2. Priority Tasks (Span 7) */}
-        <div className={`md:col-span-7 ${boxClass} p-0 flex flex-col`}>
+        {/* 2. Today's Tasks (All pending tasks for today) */}
+        <div className={`md:col-span-7 ${boxClass} p-0 flex flex-col h-[400px]`}>
            <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
               <div className="flex items-center gap-2">
-                 <Target className="text-red-500" size={18} />
-                 <h3 className="font-bold text-gray-900 dark:text-white uppercase tracking-tight">Priority Focus</h3>
+                 <ListTodo className="text-primary-600" size={18} />
+                 <h3 className="font-bold text-gray-900 dark:text-white uppercase tracking-tight">Today's Agenda</h3>
               </div>
               <button 
                 onClick={() => { setEditingTask(null); setActiveModal('task'); }} 
                 className="text-xs bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 px-3 py-1.5 rounded-lg font-bold text-gray-600 dark:text-gray-300 transition-colors shadow-sm"
               >
-                 + New
+                 + Add Task
               </button>
            </div>
-           <div className="p-4 space-y-3 flex-1 overflow-y-auto max-h-[300px] custom-scrollbar">
-              {topPriorityTasks.length > 0 ? topPriorityTasks.map(task => (
+           <div className="p-4 space-y-3 flex-1 overflow-y-auto custom-scrollbar">
+              {todaysTasks.length > 0 ? todaysTasks.map(task => (
                  <TaskCard
                     key={task.id}
                     task={task}
@@ -213,24 +207,12 @@ const Today: React.FC = () => {
                     onClick={() => setSelectedTask(task)}
                  />
               )) : (
-                 <div className="h-full flex flex-col items-center justify-center text-gray-400 py-8">
-                    <CheckSquare size={32} className="mb-2 opacity-50" />
-                    <p className="text-sm font-medium">No high priority tasks.</p>
+                 <div className="h-full flex flex-col items-center justify-center text-gray-400 py-12">
+                    <CheckSquare size={48} className="mb-3 opacity-20" />
+                    <p className="text-sm font-bold uppercase tracking-widest">Agenda Clear</p>
+                    <p className="text-xs mt-1">No pending tasks for today.</p>
                  </div>
               )}
-              
-              {/* Show Next Up if space permits */}
-              {topPriorityTasks.length < 3 && upNextTasks.slice(0, 3 - topPriorityTasks.length).map(task => (
-                 <div key={task.id} className="opacity-80">
-                    <TaskCard
-                       task={task}
-                       onToggle={() => toggleTask(task.id)}
-                       onEdit={() => { setEditingTask(task); setActiveModal('task'); }}
-                       onDelete={() => confirmDeleteTask(task.id)}
-                       onClick={() => setSelectedTask(task)}
-                    />
-                 </div>
-              ))}
            </div>
         </div>
 

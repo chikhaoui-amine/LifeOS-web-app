@@ -186,10 +186,10 @@ export const JournalForm: React.FC<JournalFormProps> = ({ initialData, onSave, o
                     <div className="space-y-10 pb-20">
                         {/* Visual Capture Section */}
                         <div>
-                           <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-4">Snap of the Day (Max 2)</label>
+                           <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-4">Daily Imagery (Max 2)</label>
                            <div className="grid grid-cols-2 gap-3">
                               {images.map((img, idx) => (
-                                 <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden group/img bg-gray-100 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 shadow-sm">
+                                 <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden group/img bg-gray-100 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 shadow-sm">
                                     <img src={img} className="w-full h-full object-cover" alt="Capture" />
                                     <button 
                                        type="button"
@@ -206,15 +206,14 @@ export const JournalForm: React.FC<JournalFormProps> = ({ initialData, onSave, o
                                     onClick={() => fileInputRef.current?.click()}
                                     className="aspect-square rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center gap-2 text-gray-400 hover:text-primary-500 hover:border-primary-500/50 hover:bg-primary-50 dark:hover:bg-primary-900/10 transition-all"
                                  >
-                                    <Camera size={24} />
-                                    <span className="text-[8px] font-black uppercase tracking-widest">Capture</span>
+                                    <ImageIcon size={24} />
+                                    <span className="text-[8px] font-black uppercase tracking-widest">Select</span>
                                  </button>
                               )}
                               <input 
                                  ref={fileInputRef}
                                  type="file"
                                  accept="image/*"
-                                 capture="environment"
                                  className="hidden"
                                  onChange={handleImageUpload}
                               />

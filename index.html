@@ -55,7 +55,6 @@
           scrollbar-width: none;
       }
 
-      /* Custom Scrollbar Styles */
       .custom-scrollbar::-webkit-scrollbar {
         width: 6px;
         height: 6px;
@@ -75,19 +74,17 @@
         transform: scale(0.96);
       }
 
-      /* Mobile Specific Font Adjustments - Scaled Down */
       @media (max-width: 640px) {
         html { font-size: 13px; }
         h1 { line-height: 1.1 !important; }
         .mobile-tight { letter-spacing: -0.02em; }
       }
 
-      /* Fix for sticky headers on mobile iOS */
+      /* Fix for sticky headers on mobile iOS/Android notches */
       .safe-top { padding-top: env(safe-area-inset-top); }
       .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
     </style>
     <script>
-      // Global shim for process.env needed by some libraries
       window.process = window.process || { env: {} };
     </script>
   <script type="importmap">

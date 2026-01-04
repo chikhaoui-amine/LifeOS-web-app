@@ -128,9 +128,6 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
         // 5. Sleep & Wellness
         const sleepLogs = await storage.load<any>('lifeos_sleep_logs_v1');
         const sleepSettings = await storage.load<any>('lifeos_sleep_settings_v1');
-        const wellnessApps = await storage.load<any>('lifeos_wellness_apps_v1') || [];
-        const wellnessSettings = await storage.load<any>('lifeos_wellness_settings_v1') || { strictMode: false, emergencyUnlockUsed: false };
-        const wellnessStats = await storage.load<any>('lifeos_wellness_stats_v1');
         
         // 6. Islamic
         const prayers = await storage.load<any>('lifeos_islamic_data_v2');
@@ -153,7 +150,6 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
         snapshot.meals = { recipes, foods, mealPlans, shoppingList };
         snapshot.sleepLogs = sleepLogs;
         snapshot.sleepSettings = sleepSettings;
-        snapshot.digitalWellness = { blockedApps: wellnessApps, settings: wellnessSettings, stats: wellnessStats };
         snapshot.prayers = prayers;
         snapshot.quran = quran;
         snapshot.adhkar = adhkar;
